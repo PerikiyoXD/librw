@@ -4,24 +4,25 @@
 
 #include "imgui/imgui.h"
 #include "imgui_impl_rw.h"
+#include "imgui_impl_vulkan.h"
 
 using namespace rw::RWDEVICE;
 
-static rw::Texture *g_FontTexture;
-static Im2DVertex *g_vertbuf;
+static rw::Texture* g_FontTexture;
+static Im2DVertex* g_vertbuf;
 static int g_vertbufSize;
 
-void
-ImGui_ImplRW_RenderDrawLists(ImDrawData* draw_data)
+#ifndef RW_VULKAN
+void ImGui_ImplRW_RenderDrawLists(ImDrawData* draw_data)
 {
-	ImGuiIO &io = ImGui::GetIO();
+	ImGuiIO& io = ImGui::GetIO();
 
 	// minimized
 	if (io.DisplaySize.x <= 0.0f || io.DisplaySize.y <= 0.0f)
 		return;
 
-	if(g_vertbuf == nil || g_vertbufSize < draw_data->TotalVtxCount){
-		if(g_vertbuf){
+	if (g_vertbuf == nil || g_vertbufSize < draw_data->TotalVtxCount) {
+		if (g_vertbuf) {
 			rwFree(g_vertbuf);
 			g_vertbuf = nil;
 		}
@@ -36,19 +37,19 @@ ImGui_ImplRW_RenderDrawLists(ImDrawData* draw_data)
 	yoff = 0.5;
 #endif
 
-	rw::Camera *cam = (rw::Camera*)rw::engine->currentCamera;
-	Im2DVertex *vtx_dst = g_vertbuf;
-	float recipZ = 1.0f/cam->nearPlane;
-	for(int n = 0; n < draw_data->CmdListsCount; n++){
-		const ImDrawList *cmd_list = draw_data->CmdLists[n];
-		const ImDrawVert *vtx_src = cmd_list->VtxBuffer.Data;
-		for(int i = 0; i < cmd_list->VtxBuffer.Size; i++){
+	rw::Camera* cam = (rw::Camera*)rw::engine->currentCamera;
+	Im2DVertex* vtx_dst = g_vertbuf;
+	float recipZ = 1.0f / cam->nearPlane;
+	for (int n = 0; n < draw_data->CmdListsCount; n++) {
+		const ImDrawList* cmd_list = draw_data->CmdLists[n];
+		const ImDrawVert* vtx_src = cmd_list->VtxBuffer.Data;
+		for (int i = 0; i < cmd_list->VtxBuffer.Size; i++) {
 			vtx_dst[i].setScreenX(vtx_src[i].pos.x + xoff);
 			vtx_dst[i].setScreenY(vtx_src[i].pos.y + yoff);
 			vtx_dst[i].setScreenZ(rw::im2d::GetNearZ());
 			vtx_dst[i].setCameraZ(cam->nearPlane);
 			vtx_dst[i].setRecipCameraZ(recipZ);
-			vtx_dst[i].setColor(vtx_src[i].col&0xFF, vtx_src[i].col>>8 & 0xFF, vtx_src[i].col>>16 & 0xFF, vtx_src[i].col>>24 & 0xFF);
+			vtx_dst[i].setColor(vtx_src[i].col & 0xFF, vtx_src[i].col >> 8 & 0xFF, vtx_src[i].col >> 16 & 0xFF, vtx_src[i].col >> 24 & 0xFF);
 			vtx_dst[i].setU(vtx_src[i].uv.x, recipZ);
 			vtx_dst[i].setV(vtx_src[i].uv.y, recipZ);
 		}
@@ -59,7 +60,7 @@ ImGui_ImplRW_RenderDrawLists(ImDrawData* draw_data)
 	int srcBlend = rw::GetRenderState(rw::SRCBLEND);
 	int dstBlend = rw::GetRenderState(rw::DESTBLEND);
 	int ztest = rw::GetRenderState(rw::ZTESTENABLE);
-	void *tex = rw::GetRenderStatePtr(rw::TEXTURERASTER);
+	void* tex = rw::GetRenderStatePtr(rw::TEXTURERASTER);
 	int addrU = rw::GetRenderState(rw::TEXTUREADDRESSU);
 	int addrV = rw::GetRenderState(rw::TEXTUREADDRESSV);
 	int filter = rw::GetRenderState(rw::TEXTUREFILTER);
@@ -72,32 +73,33 @@ ImGui_ImplRW_RenderDrawLists(ImDrawData* draw_data)
 	rw::SetRenderState(rw::CULLMODE, rw::CULLNONE);
 
 	int vtx_offset = 0;
-	for(int n = 0; n < draw_data->CmdListsCount; n++){
-		const ImDrawList *cmd_list = draw_data->CmdLists[n];
+	for (int n = 0; n < draw_data->CmdListsCount; n++) {
+		const ImDrawList* cmd_list = draw_data->CmdLists[n];
 		int idx_offset = 0;
-		for(int i = 0; i < cmd_list->CmdBuffer.Size; i++){
-			const ImDrawCmd *pcmd = &cmd_list->CmdBuffer[i];
-			if(pcmd->UserCallback)
+		for (int i = 0; i < cmd_list->CmdBuffer.Size; i++) {
+			const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[i];
+			if (pcmd->UserCallback)
 				pcmd->UserCallback(cmd_list, pcmd);
-			else{
-				rw::Texture *tex = (rw::Texture*)pcmd->TextureId;
-				if(tex && tex->raster){
+			else {
+				rw::Texture* tex = (rw::Texture*)pcmd->TextureId;
+				if (tex && tex->raster) {
 					rw::SetRenderStatePtr(rw::TEXTURERASTER, tex->raster);
 					rw::SetRenderState(rw::TEXTUREADDRESSU, tex->getAddressU());
 					rw::SetRenderState(rw::TEXTUREADDRESSV, tex->getAddressV());
 					rw::SetRenderState(rw::TEXTUREFILTER, tex->getFilter());
-				}else
+				}
+				else
 					rw::SetRenderStatePtr(rw::TEXTURERASTER, nil);
 				rw::im2d::RenderIndexedPrimitive(rw::PRIMTYPETRILIST,
-					g_vertbuf+vtx_offset, cmd_list->VtxBuffer.Size,
-					cmd_list->IdxBuffer.Data+idx_offset, pcmd->ElemCount);
+					g_vertbuf + vtx_offset, cmd_list->VtxBuffer.Size,
+					cmd_list->IdxBuffer.Data + idx_offset, pcmd->ElemCount);
 			}
 			idx_offset += pcmd->ElemCount;
 		}
 		vtx_offset += cmd_list->VtxBuffer.Size;
 	}
 
-	rw::SetRenderState(rw::VERTEXALPHA,vertexAlpha);
+	rw::SetRenderState(rw::VERTEXALPHA, vertexAlpha);
 	rw::SetRenderState(rw::SRCBLEND, srcBlend);
 	rw::SetRenderState(rw::DESTBLEND, dstBlend);
 	rw::SetRenderState(rw::ZTESTENABLE, ztest);
@@ -106,15 +108,15 @@ ImGui_ImplRW_RenderDrawLists(ImDrawData* draw_data)
 	rw::SetRenderState(rw::TEXTUREADDRESSV, addrV);
 	rw::SetRenderState(rw::TEXTUREFILTER, filter);
 	rw::SetRenderState(rw::CULLMODE, cullmode);
-}
 
-bool
-ImGui_ImplRW_Init(void)
+}
+#endif
+bool ImGui_ImplRW_Init(void)
 {
 	using namespace sk;
 
 	ImGui::CreateContext();
-	ImGuiIO &io = ImGui::GetIO();
+	ImGuiIO& io = ImGui::GetIO();
 
 	io.KeyMap[ImGuiKey_Tab] = KEY_TAB;
 	io.KeyMap[ImGuiKey_LeftArrow] = KEY_LEFT;
@@ -139,54 +141,57 @@ ImGui_ImplRW_Init(void)
 	return true;
 }
 
-void
-ImGui_ImplRW_Shutdown(void)
+void ImGui_ImplRW_Shutdown(void)
 {
 }
 
-static bool
-ImGui_ImplRW_CreateFontsTexture()
+static bool ImGui_ImplRW_CreateFontsTexture()
 {
+#ifdef RW_VULKAN
+
+#else
 	// Build texture atlas
-	ImGuiIO &io = ImGui::GetIO();
-	unsigned char *pixels;
+	ImGuiIO& io = ImGui::GetIO();
+	unsigned char* pixels;
 	int width, height;
 	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, nil);
 
-	rw::Image *image;
+	rw::Image* image;
 	image = rw::Image::create(width, height, 32);
 	image->allocate();
-	for(int y = 0; y < height; y++)
-		memcpy(image->pixels + image->stride*y, pixels + width*4* y, width*4);
+	for (int y = 0; y < height; y++)
+		memcpy(image->pixels + image->stride * y, pixels + width * 4 * y, width * 4);
 	g_FontTexture = rw::Texture::create(rw::Raster::createFromImage(image));
 	g_FontTexture->setFilter(rw::Texture::LINEAR);
 	image->destroy();
-	
+
 	// Store our identifier
 	io.Fonts->TexID = (void*)g_FontTexture;
 
+#endif
+	
 	return true;
 }
 
-bool
-ImGui_ImplRW_CreateDeviceObjects()
+bool ImGui_ImplRW_CreateDeviceObjects()
 {
-//	if(!g_pd3dDevice)
-//		return false;
-	if(!ImGui_ImplRW_CreateFontsTexture())
+	//	if(!g_pd3dDevice)
+	//		return false;
+	if (!ImGui_ImplRW_CreateFontsTexture())
 		return false;
 	return true;
 }
-
-void
-ImGui_ImplRW_NewFrame(float timeDelta)
+#ifdef ENABLE_SKELETON
+void ImGui_ImplRW_NewFrame(float timeDelta)
 {
-	if(!g_FontTexture)
+	if (!g_FontTexture)
 		ImGui_ImplRW_CreateDeviceObjects();
 
-	ImGuiIO &io = ImGui::GetIO();
+	ImGuiIO& io = ImGui::GetIO();
 
+#ifdef ENABLE_SKELETON
 	io.DisplaySize = ImVec2(sk::globals.width, sk::globals.height);
+#endif
 	io.DeltaTime = timeDelta;
 
 	io.KeyCtrl = io.KeysDown[sk::KEY_LCTRL] || io.KeysDown[sk::KEY_RCTRL];
@@ -194,30 +199,69 @@ ImGui_ImplRW_NewFrame(float timeDelta)
 	io.KeyAlt = io.KeysDown[sk::KEY_LALT] || io.KeysDown[sk::KEY_RALT];
 	io.KeySuper = false;
 
-	if(io.WantSetMousePos)
+#ifdef ENABLE_SKELETON
+	if (io.WantSetMousePos)
 		sk::SetMousePosition(io.MousePos.x, io.MousePos.y);
+#endif
 
+#ifdef RW_VULKAN
+	ImGui_ImplVulkan_NewFrame();
+#endif
+	ImGui::NewFrame();
+}
+#else
+void ImGui_ImplRW_NewFrame(float timeDelta, uint32_t w, uint32_t h)
+{
+	if(!g_FontTexture) ImGui_ImplRW_CreateDeviceObjects();
+
+	ImGuiIO &io = ImGui::GetIO();
+
+	io.DisplaySize = ImVec2(w,h);
+	io.DeltaTime = timeDelta;
+	io.KeyCtrl = io.KeysDown[sk::KEY_LCTRL] || io.KeysDown[sk::KEY_RCTRL];
+	io.KeyShift = io.KeysDown[sk::KEY_LSHIFT] || io.KeysDown[sk::KEY_RSHIFT];
+	io.KeyAlt = io.KeysDown[sk::KEY_LALT] || io.KeysDown[sk::KEY_RALT];
+	io.KeySuper = false;
+
+#ifdef ENABLE_SKELETON
+	if(io.WantSetMousePos) sk::SetMousePosition(io.MousePos.x, io.MousePos.y);
+#endif
+
+#ifdef RW_VULKAN
+	ImGui_ImplVulkan_NewFrame();
+#endif
 	ImGui::NewFrame();
 }
 
-sk::EventStatus
-ImGuiEventHandler(sk::Event e, void *param)
+#include "imgui_internal.h"
+void ImGui_ImplRW_EndFrame()
+{
+	if(GImGui->FrameCount == 0) {
+		ImGui::EndFrame();
+		ImGui::Render();
+	}
+}
+
+#endif
+
+#ifdef ENABLE_SKELETON
+sk::EventStatus ImGuiEventHandler(sk::Event e, void* param)
 {
 	using namespace sk;
 
-	ImGuiIO &io = ImGui::GetIO();
-	MouseState *ms;
+	ImGuiIO& io = ImGui::GetIO();
+	MouseState* ms;
 	uint c;
 
-	switch(e){
+	switch (e) {
 	case KEYDOWN:
 		c = *(int*)param;
-		if(c < 256)
+		if (c < 256)
 			io.KeysDown[c] = 1;
 		return EVENTPROCESSED;
 	case KEYUP:
 		c = *(int*)param;
-		if(c < 256)
+		if (c < 256)
 			io.KeysDown[c] = 0;
 		return EVENTPROCESSED;
 	case CHARINPUT:
@@ -238,3 +282,4 @@ ImGuiEventHandler(sk::Event e, void *param)
 	}
 	return EVENTPROCESSED;
 }
+#endif

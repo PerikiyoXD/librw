@@ -40,6 +40,10 @@
 #define RW_OPENGL
 #endif
 
+#ifdef RW_VULKAN
+#define RWDEVICE vulkan
+#endif
+
 namespace rw {
 
 #ifdef RW_PS2
@@ -298,18 +302,28 @@ Quat slerp(const Quat &q, const Quat &p, float32 a);
 
 struct RawMatrix
 {
-	V3d right;
-	float32 rightw;
-	V3d up;
-	float32 upw;
-	V3d at;
-	float32 atw;
-	V3d pos;
-	float32 posw;
+	union
+	{
+		struct
+		{
+			V3d right;
+			float32 rightw;
+			V3d up;
+			float32 upw;
+			V3d at;
+			float32 atw;
+			V3d pos;
+			float32 posw;
+		};
+		float values[16];
+	};
 
+	float operator[](int32_t idx)const;
+	float& operator[](int32_t idx);
 	// NB: this is dst = src2*src1, i.e. src1 is applied first, then src2
 	static void mult(RawMatrix *dst, RawMatrix *src1, RawMatrix *src2);
-	static void transpose(RawMatrix *dst, RawMatrix *src);
+	static void transpose(RawMatrix* dst, RawMatrix* src);
+	static void invert(RawMatrix* dst, RawMatrix* src);
 	static void setIdentity(RawMatrix *dst);
 };
 
@@ -540,6 +554,8 @@ enum Platform
 	PLATFORM_WDGL = 11,	// WarDrum OpenGL
 	PLATFORM_GL3  = 12,	// my GL3 implementation
 
+	PLATFORM_VULKAN = 13,
+
 	NUM_PLATFORMS,
 
 	FOURCC_PS2 = 0x00325350		// 'PS2\0'
@@ -612,6 +628,7 @@ enum PluginID
 	ID_RASTERD3D9    = MAKEPLUGINID(VEND_RASTER, PLATFORM_D3D9),
 	ID_RASTERWDGL    = MAKEPLUGINID(VEND_RASTER, PLATFORM_WDGL),
 	ID_RASTERGL3     = MAKEPLUGINID(VEND_RASTER, PLATFORM_GL3),
+	ID_RASTERVULKAN  = MAKEPLUGINID(VEND_RASTER, PLATFORM_VULKAN),
 
 	// anything driver/device related (only as allocation tag)
 	ID_DRIVER        = MAKEPLUGINID(VEND_DRIVER, 0)

@@ -9,6 +9,7 @@
 #include "../rwengine.h"
 #include "../rwpipeline.h"
 #include "../rwobjects.h"
+
 #ifdef RW_OPENGL
 #include "rwgl3.h"
 #include "rwgl3shader.h"
@@ -143,6 +144,11 @@ lightingCB(void)
 	return setLights(&lightData);
 }
 
+void 
+defaultUpdateCB(Atomic* atomic, InstanceDataHeader* header) 
+{
+	//pointless for opengl, good for vulkan or dx12
+}
 
 void
 defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)

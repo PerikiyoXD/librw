@@ -50,7 +50,8 @@ public:
 
 void defaultInstanceCB(Geometry *geo, InstanceData *header);
 void defaultUninstanceCB(Geometry *geo, InstanceData *header);
-void defaultRenderCB(Atomic *atomic, InstanceDataHeader *header);
+void defaultRenderCB(Atomic* atomic, InstanceDataHeader* header);
+void defaultUpdateCB(Atomic* atomic, InstanceDataHeader* header);
 
 ObjPipeline *makeDefaultPipeline(void);
 

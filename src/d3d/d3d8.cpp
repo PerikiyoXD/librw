@@ -564,6 +564,7 @@ readNativeTexture(Stream *stream)
 		pallength = format & Raster::PAL4 ? 32 : 256;
 		if(!d3d::isP8supported){
 			tex->raster = readAsImage(stream, width, height, depth, format|type, numLevels);
+			memcpy(tex->raster->name, tex->name, sizeof(char) * 32);
 			return tex;
 		}
 	}
@@ -580,7 +581,7 @@ readNativeTexture(Stream *stream)
 		ras = GETD3DRASTEREXT(raster);
 	}
 	tex->raster = raster;
-
+	memcpy(raster->name, tex->name, sizeof(char) * 32);
 	// TODO: check if format supported and convert if necessary
 
 	if(pallength != 0)

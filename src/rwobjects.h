@@ -223,7 +223,8 @@ struct Raster
 
 	PLUGINBASE
 	int32 platform;
-
+	char name[32];
+	
 	// TODO: use bytes
 	int32 type;
 	int32 flags;
@@ -262,7 +263,7 @@ struct Raster
 	static bool formatHasAlpha(int32 format);
 
 	void show(uint32 flags);
-
+	void setTextureName(const char *name);
 	static Raster *pushContext(Raster *raster);
 	static Raster *popContext(void);
 	static Raster *getCurrentContext(void);
@@ -315,9 +316,13 @@ struct Raster
 	};
 };
 
+
+
 void conv_RGBA8888_from_RGBA8888(uint8 *out, uint8 *in);
 void conv_BGRA8888_from_RGBA8888(uint8 *out, uint8 *in);
 void conv_RGBA8888_from_RGB888(uint8 *out, uint8 *in);
+void conv_RGBA8888Transparency_from_RGB888(uint8 *out, uint8 *in);
+void conv_RGBA8888Transparency_from_RGBA8888(uint8 *out, uint8 *in);
 void conv_BGRA8888_from_RGB888(uint8 *out, uint8 *in);
 void conv_RGB888_from_RGB888(uint8 *out, uint8 *in);
 void conv_BGR888_from_RGB888(uint8 *out, uint8 *in);
@@ -432,7 +437,7 @@ struct Material
 	SurfaceProperties surfaceProps;
 	Pipeline *pipeline;
 	int32 refCount;
-
+	int32 bindlessId;
 	static int32 numAllocated;
 
 	static Material *create(void);
@@ -608,6 +613,7 @@ struct Atomic
 {
 	PLUGINBASE
 	typedef void (*RenderCB)(Atomic *atomic);
+	typedef void (*BeginUpdateCB)(Atomic* atomic);
 	enum { ID = 1 };
 	enum {
 	// flags
@@ -627,6 +633,7 @@ struct Atomic
 	LLLink inClump;
 	ObjPipeline *pipeline;
 	RenderCB renderCB;
+	BeginUpdateCB beginUpdateCB;
 
 	World *world;
 	ObjectWithFrame::Sync originalSync;
@@ -649,6 +656,7 @@ struct Atomic
 	void instance(void);
 	void uninstance(void);
 	void render(void) { this->renderCB(this); }
+	void beginUpdate(void) { this->beginUpdateCB(this); }
 	void setRenderCB(RenderCB renderCB){
 		this->renderCB = renderCB;
 		if(this->renderCB == nil)
@@ -661,7 +669,8 @@ struct Atomic
 	bool streamWriteClump(Stream *stream, FrameList_ *frmlst);
 	uint32 streamGetSize(void);
 
-	static void defaultRenderCB(Atomic *atomic);
+	static void defaultRenderCB(Atomic* atomic);
+	static void defaultUpdateCB(Atomic* atomic);
 };
 
 void registerAtomicRightsPlugin(void);
@@ -683,6 +692,8 @@ struct Light
 	// world extension
 	World *world;
 	ObjectWithFrame::Sync originalSync;
+
+	int32 sunLight;
 
 	static int32 numAllocated;
 
@@ -715,6 +726,7 @@ struct Light
 		LIGHTATOMICS = 1,
 		LIGHTWORLD = 2
 	};
+	
 };
 
 struct FrustumPlane
@@ -835,6 +847,7 @@ struct Clump
 	bool streamWrite(Stream *stream);
 	uint32 streamGetSize(void);
 	void render(void);
+	void beginUpdate(void);
 };
 
 // used by enumerateLights for lighting callback
@@ -846,6 +859,19 @@ struct WorldLights
 	Light **directionals;	// only directionals
 	int32 numLocals;
 	Light **locals;	// points, (soft)spots
+};
+
+struct LightData
+{
+	float type;
+	float radius;
+	float minusCosAngle;
+	float hardSpot;
+	V3d position;
+	float distance;
+	V3d direction;
+	int32_t castShadow;
+	RGBAf color;
 };
 
 // A bit of a stub right now
@@ -863,7 +889,8 @@ struct World
 	static World *create(BBox *bbox = nil);	// TODO: should probably make this non-optional
 	void destroy(void);
 	void addLight(Light *light);
-	void removeLight(Light *light);
+	void removeLight(Light* light);
+	void removeLights();
 	void addCamera(Camera *cam);
 	void removeCamera(Camera *cam);
 	void addAtomic(Atomic *atomic);

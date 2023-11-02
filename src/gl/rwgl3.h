@@ -223,12 +223,14 @@ public:
 
 	void (*instanceCB)(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 	void (*uninstanceCB)(Geometry *geo, InstanceDataHeader *header);
-	void (*renderCB)(Atomic *atomic, InstanceDataHeader *header);
+	void (*renderCB)(Atomic* atomic, InstanceDataHeader* header);
+	void (*beginUpdate)(Atomic* atomic, InstanceDataHeader* header);
 };
 
 void defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 void defaultUninstanceCB(Geometry *geo, InstanceDataHeader *header);
-void defaultRenderCB(Atomic *atomic, InstanceDataHeader *header);
+void defaultRenderCB(Atomic* atomic, InstanceDataHeader* header);
+void defaultUpdateCB(Atomic* atomic, InstanceDataHeader* header);
 int32 lightingCB(Atomic *atomic);
 int32 lightingCB(void);
 

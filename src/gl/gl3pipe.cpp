@@ -136,6 +136,12 @@ uninstance(rw::ObjPipeline *rwpipe, Atomic *atomic)
 }
 
 static void
+beginUpdate(rw::ObjPipeline* rwpipe, Atomic* atomic) 
+{
+	
+}
+
+static void
 render(rw::ObjPipeline *rwpipe, Atomic *atomic)
 {
 	ObjPipeline *pipe = (ObjPipeline*)rwpipe;
@@ -154,6 +160,7 @@ ObjPipeline::init(void)
 	this->impl.instance = gl3::instance;
 	this->impl.uninstance = gl3::uninstance;
 	this->impl.render = gl3::render;
+	this->impl.beginUpdate = gl3::beginUpdate;
 	this->instanceCB = nil;
 	this->uninstanceCB = nil;
 	this->renderCB = nil;
@@ -322,6 +329,7 @@ makeDefaultPipeline(void)
 	pipe->instanceCB = defaultInstanceCB;
 	pipe->uninstanceCB = defaultUninstanceCB;
 	pipe->renderCB = defaultRenderCB;
+	pipe->beginUpdate= defaultUpdateCB;
 	return pipe;
 }
 

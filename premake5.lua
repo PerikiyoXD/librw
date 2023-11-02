@@ -13,14 +13,14 @@ newoption {
 	trigger     = "glfwdir64",
 	value       = "PATH",
 	description = "Directory of glfw",
-	default     = "../glfw-3.3.4.bin.WIN64",
+	default     = "../glfw-3.3.2.bin.WIN64",
 }
 
 newoption {
 	trigger     = "glfwdir32",
 	value       = "PATH",
 	description = "Directory of glfw",
-	default     = "../glfw-3.3.4.bin.WIN32",
+	default     = "../glfw-3.3.2.bin.WIN32",
 }
 
 newoption {
@@ -30,6 +30,33 @@ newoption {
 	default     = "../SDL2-2.0.14",
 }
 
+local function ends_with(str, ending)
+	return ending == "" or str:sub(-#ending) == ending
+end
+ 
+function findGlslFiles(directory)
+	local i, t, popen = 0, {}, io.popen
+	for filename in popen('dir "'..directory..'" /b'):lines() do
+		if not ends_with(filename,"spv") then
+			i = i + 1
+			t[i] = filename
+			print(filename)
+		end
+	end
+	return t
+end
+ 
+function generateSpirV(directory)
+	local files = findGlslFiles(directory)
+	local basePath = _WORKING_DIR..'/'..directory
+	for k,v in pairs(files) do
+	   local shaderFile = basePath ..'/'..v
+	   local cmd='%VULKAN_SDK%/Bin/glslangValidator.exe --target-env vulkan1.2 -V '..shaderFile.." -o " ..shaderFile..".spv"
+	   print(cmd)
+	   os.execute(cmd)
+	end
+ end
+
 workspace "librw"
 	location "build"
 	language "C++"
@@ -38,7 +65,7 @@ workspace "librw"
 	filter { "system:windows" }
 		configurations { "ReleaseStatic" }
 		platforms { "win-x86-null", "win-x86-gl3", "win-x86-d3d9",
-			"win-amd64-null", "win-amd64-gl3", "win-amd64-d3d9" }
+			"win-amd64-null", "win-amd64-gl3", "win-amd64-d3d9", "win-amd64-vulkan" }
 	filter { "system:linux" }
 		platforms { "linux-x86-null", "linux-x86-gl3",
 		"linux-amd64-null", "linux-amd64-gl3",
@@ -50,8 +77,10 @@ workspace "librw"
 	filter {}
 
 	filter "configurations:Debug"
-		defines { "DEBUG" }
+		defines { "DEBUG", "_DEBUG" }
 		symbols "On"
+		optimize "Off"
+		
 	filter "configurations:Release*"
 		defines { "NDEBUG" }
 		optimize "On"
@@ -65,6 +94,10 @@ workspace "librw"
 		if _OPTIONS["gfxlib"] == "sdl2" then
 			defines { "LIBRW_SDL2" }
 		end
+	
+	filter { "platforms:*vulkan" }
+		defines { "RW_VULKAN", "MAPLE_VULKAN", "USE_VMA_ALLOCATOR" }
+		
 	filter { "platforms:*d3d9" }
 		defines { "RW_D3D9" }
 	filter { "platforms:ps2" }
@@ -89,13 +122,16 @@ workspace "librw"
 
 	filter { "platforms:win*gl3" }
 		includedirs { path.join(_OPTIONS["sdl2dir"], "include") }
+
 	filter { "platforms:win-x86-gl3" }
 		includedirs { path.join(_OPTIONS["glfwdir32"], "include") }
 	filter { "platforms:win-amd64-gl3" }
 		includedirs { path.join(_OPTIONS["glfwdir64"], "include") }
-
+	filter { "platforms:win-amd64-vulkan" }
+		includedirs { path.join(_OPTIONS["glfwdir64"], "include") }
+		
 	filter "action:vs*"
-		buildoptions { "/wd4996", "/wd4244" }
+		buildoptions { "/wd4996", "/wd4244", "/MP" }
 
 	filter { "platforms:win*gl3", "action:not vs*" }
 		if _OPTIONS["gfxlib"] == "sdl2" then
@@ -103,20 +139,50 @@ workspace "librw"
 		end
 
 	filter {}
-
+	
+	includedirs { path.join( "$(VULKAN_SDK)/include" ) }
+	
 	Libdir = "lib/%{cfg.platform}/%{cfg.buildcfg}"
 	Bindir = "bin/%{cfg.platform}/%{cfg.buildcfg}"
+
+project "libRHI"
+	kind "StaticLib"
+	cppdialect "c++17"
+	targetname "libRHI"
+	files { "*tools/libRHI/*.*" }
+	files { "*tools/libRHI/Vulkan/*.*" }
+	files { "*tools/libRHI/Vulkan/Raytracing/*.*" }
+	sysincludedirs { "tools/libRHI" }
+	sysincludedirs { "tools/spdlog/include" }
+	sysincludedirs { "skeleton/imgui" }		
+	sysincludedirs { "$(VULKAN_SDK)/include"}
+	sysincludedirs { _OPTIONS["glfwdir64"].."/include" }
+	defines { "MAPLE_VULKAN", "USE_VMA_ALLOCATOR" }
+	links { "$(VULKAN_SDK)/lib/vulkan-1.lib", 
+			"$(VULKAN_SDK)/lib/spirv-cross-cored.lib", 
+			"$(VULKAN_SDK)/lib/glslangd.lib",
+			"$(VULKAN_SDK)/lib/OSDependentd.lib",
+			"$(VULKAN_SDK)/lib/OGLCompilerd.lib",
+			"$(VULKAN_SDK)/lib/GenericCodeGend.lib",
+			"$(VULKAN_SDK)/lib/MachineIndependentd.lib",
+			"$(VULKAN_SDK)/lib/shaderc_combinedd.lib"
+		  }
 
 project "librw"
 	kind "StaticLib"
 	targetname "rw"
+	cppdialect "c++17"
 	targetdir (Libdir)
 	defines { "LODEPNG_NO_COMPILE_CPP" }
 	files { "src/*.*" }
 	files { "src/*/*.*" }
 	filter { "platforms:*gl3" }
 		files { "src/gl/glad/*.*" }
-
+	filter { "platforms:*vulkan" }
+		includedirs { "tools/spdlog/include" }
+		sysincludedirs { "tools/libRHI"}		
+		links { "libRHI" }
+		  
 project "dumprwtree"
 	kind "ConsoleApp"
 	targetdir (Bindir)
@@ -134,6 +200,8 @@ function findlibs()
 		else
 			links { "SDL2" }
 		end
+	filter { "platforms:win-amd64-vulkan" }	
+		libdirs { path.join(_OPTIONS["glfwdir64"], "lib-vc2015") }
 	filter { "platforms:win-amd64-gl3" }
 		libdirs { path.join(_OPTIONS["glfwdir64"], "lib-vc2015") }
 		libdirs { path.join(_OPTIONS["sdl2dir"], "lib/x64") }
@@ -151,6 +219,8 @@ function findlibs()
 		links { "gdi32", "d3d9" }
 	filter { "platforms:*d3d9", "action:vs*" }
 		links { "Xinput9_1_0" }
+	filter { "platforms:*vulkan" }
+		links { "$(VULKAN_SDK)/lib/vulkan-1.lib", "glfw3", "$(VULKAN_SDK)/lib/spirv-cross-cored.lib" }
 	filter {}
 end
 
@@ -158,6 +228,7 @@ function skeleton()
 	files { "skeleton/*.cpp", "skeleton/*.h" }
 	files { "skeleton/imgui/*.cpp", "skeleton/imgui/*.h" }
 	includedirs { "skeleton" }
+	defines { "ENABLE_SKELETON" }
 end
 
 function skeltool(dir)
@@ -186,7 +257,7 @@ function vucode()
 end
 
 project "playground"
-	kind "WindowedApp"
+	kind "ConsoleApp"
 	characterset ("MBCS")
 	skeltool("playground")
 	entrypoint("WinMainCRTStartup")
@@ -194,7 +265,7 @@ project "playground"
 	removeplatforms { "ps2" } -- for now
 
 project "imguitest"
-	kind "WindowedApp"
+	kind "ConsoleApp"
 	characterset ("MBCS")
 	skeltool("imguitest")
 	entrypoint("WinMainCRTStartup")
@@ -202,15 +273,16 @@ project "imguitest"
 	removeplatforms { "ps2" }
 
 project "lights"
-	kind "WindowedApp"
+	kind "ConsoleApp"
 	characterset ("MBCS")
 	skeltool("lights")
 	entrypoint("WinMainCRTStartup")
 	removeplatforms { "*null" }
 	removeplatforms { "ps2" }
 
+
 project "subrast"
-	kind "WindowedApp"
+	kind "ConsoleApp"
 	characterset ("MBCS")
 	skeltool("subrast")
 	entrypoint("WinMainCRTStartup")
@@ -218,7 +290,7 @@ project "subrast"
 	removeplatforms { "ps2" }
 
 project "camera"
-	kind "WindowedApp"
+	kind "ConsoleApp"
 	characterset ("MBCS")
 	skeltool("camera")
 	entrypoint("WinMainCRTStartup")
@@ -226,7 +298,7 @@ project "camera"
 	removeplatforms { "ps2" }
 
 project "im2d"
-	kind "WindowedApp"
+	kind "ConsoleApp"
 	characterset ("MBCS")
 	skeltool("im2d")
 	entrypoint("WinMainCRTStartup")
@@ -234,7 +306,7 @@ project "im2d"
 	removeplatforms { "ps2" }
 
 project "im3d"
-	kind "WindowedApp"
+	kind "ConsoleApp"
 	characterset ("MBCS")
 	skeltool("im3d")
 	entrypoint("WinMainCRTStartup")
@@ -277,7 +349,7 @@ project "ps2test"
 --	links { "librw" }
 
 project "hopalong"
-	kind "WindowedApp"
+	kind "ConsoleApp"
 	characterset ("MBCS")
 	skeltool("hopalong")
 	entrypoint("WinMainCRTStartup")

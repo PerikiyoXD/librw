@@ -18,6 +18,7 @@ using namespace d3d;
 
 #ifndef RW_D3D9
 void defaultRenderCB(Atomic*, InstanceDataHeader*) {}
+void defaultUpdateCB(Atomic* atomic, InstanceDataHeader* header) {};
 #else
 
 // This is a bit abandoned, use d3d9 instead

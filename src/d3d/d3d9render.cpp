@@ -20,6 +20,7 @@ using namespace d3d;
 #ifndef RW_D3D9
 void defaultRenderCB(Atomic*, InstanceDataHeader*) {}
 void defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
+void defaultUpdateCB(Atomic* atomic, InstanceDataHeader* header) {};
 #else
 
 void

@@ -350,6 +350,7 @@ makeSkinPipeline(void)
 	pipe->instanceCB = skinInstanceCB;
 	pipe->uninstanceCB = skinUninstanceCB;
 	pipe->renderCB = skinRenderCB;
+	pipe->beginUpdate = defaultUpdateCB;
 	pipe->pluginID = ID_SKIN;
 	pipe->pluginData = 1;
 	return pipe;
