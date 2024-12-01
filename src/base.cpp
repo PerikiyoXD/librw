@@ -313,12 +313,12 @@ RawMatrix::transpose(RawMatrix *dst, RawMatrix *src)
 void
 RawMatrix::setIdentity(RawMatrix *dst)
 {
-	static RawMatrix identity = {
-		1.0f, 0.0f, 0.0f , 0.0f,
-		0.0f, 1.0f, 0.0f , 0.0f,
-		0.0f, 0.0f, 1.0f , 0.0f,
-		0.0f, 0.0f, 0.0f , 1.0f
-	};
+	static RawMatrix identity = RawMatrix(
+		{1.0f, 0.0f, 0.0f}, 0.0f,
+		{0.0f, 1.0f, 0.0f}, 0.0f,
+		{0.0f, 0.0f, 1.0f}, 0.0f,
+		{0.0f, 0.0f, 0.0f}, 1.0f
+	);
 	*dst = identity;
 }
 

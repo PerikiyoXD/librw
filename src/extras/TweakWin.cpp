@@ -5,7 +5,7 @@
 
 #include "TweakWin.h"
 #include "Tweak/Tweakable.h"
-#include "imgui/imgui.h"
+#include "imgui.h"
 
 #include "../rwbase.h"
 #include "../rwplg.h"
@@ -17,6 +17,7 @@
 #include "../vulkan/rwvk.h"
 #include "vulkan/VulkanDebug.h"
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 

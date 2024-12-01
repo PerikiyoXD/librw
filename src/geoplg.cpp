@@ -18,7 +18,10 @@
 #include "d3d/rwd3d9.h"
 #include "gl/rwwdgl.h"
 #include "gl/rwgl3.h"
+
+#ifdef RW_VULKAN
 #include "vulkan/rwvk.h"
+#endif // RW_VULKAN
 
 #define PLUGIN_ID 2
 
@@ -48,7 +51,7 @@ Geometry::allocateMeshes(int32 numMeshes, uint32 numIndices, bool32 noIndices)
 		this->meshHeader = mh;
 	}else{
 		oldNumMeshes = 0;
-		mh = (MeshHeader*)rwNew(sz, MEMDUR_EVENT | ID_GEOMETRY);
+		mh = (MeshHeader*)rwNew(sz, MEMDUR_EVENT | (MemHint)ID_GEOMETRY);
 		mh->flags = 0;
 		this->meshHeader = mh;
 	}

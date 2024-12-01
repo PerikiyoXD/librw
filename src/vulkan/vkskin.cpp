@@ -34,6 +34,7 @@
 #include "DescriptorSet.h"
 #include "VertexBuffer.h"
 #endif
+
 namespace rw
 {
 	namespace vulkan
@@ -79,7 +80,7 @@ namespace rw
 				// Positions
 				a->index = ATTRIB_POS;
 				a->size = 3;
-				a->type = GL_FLOAT;
+				a->type = VK_FORMAT_R32G32B32_SFLOAT;
 				a->offset = stride;
 				stride += 12;
 				a++;
@@ -90,7 +91,7 @@ namespace rw
 				{
 					a->index = ATTRIB_NORMAL;
 					a->size = 3;
-					a->type = GL_FLOAT;
+					a->type = VK_FORMAT_R32G32B32_SFLOAT;
 					a->offset = stride;
 					stride += 12;
 					a++;
@@ -100,7 +101,7 @@ namespace rw
 				if (isPrelit) {
 					a->index = ATTRIB_COLOR;
 					a->size = 4;
-					a->type = GL_FLOAT;
+					a->type = VK_FORMAT_R32G32B32_SFLOAT;
 					a->offset = stride;
 					stride += 16;
 					a++;
@@ -110,7 +111,7 @@ namespace rw
 				for (int32 n = 0; n < geo->numTexCoordSets; n++) {
 					a->index = ATTRIB_TEXCOORDS0 + n;
 					a->size = 2;
-					a->type = GL_FLOAT;
+					a->type = VK_FORMAT_R32G32B32_SFLOAT;
 					a->offset = stride;
 					stride += 8;
 					a++;
@@ -119,7 +120,7 @@ namespace rw
 				// Weights
 				a->index = ATTRIB_WEIGHTS;
 				a->size = 4;
-				a->type = GL_FLOAT;
+				a->type = VK_FORMAT_R32G32B32_SFLOAT;
 				a->offset = stride;
 				stride += 16;
 				a++;
@@ -127,7 +128,7 @@ namespace rw
 				// Indices
 				a->index = ATTRIB_INDICES;
 				a->size = 4;
-				a->type = GL_FLOAT;
+				a->type = VK_FORMAT_R32G32B32_SFLOAT;
 				a->offset = stride;
 				stride += 16;
 				a++;
@@ -135,13 +136,13 @@ namespace rw
 				header->numAttribs = a - tmpAttribs;
 				for (a = tmpAttribs; a != &tmpAttribs[header->numAttribs]; a++)
 					a->stride = stride;
-				header->attribDesc = rwNewT(AttribDesc, header->numAttribs, MEMDUR_EVENT | ID_GEOMETRY);
+				header->attribDesc = rwNewT(AttribDesc, header->numAttribs, MEMDUR_EVENT | static_cast<MemHint>(ID_GEOMETRY));
 				memcpy(header->attribDesc, tmpAttribs, header->numAttribs * sizeof(AttribDesc));
 
 				//
 				// Allocate vertex buffer
 				//
-				header->vertexBuffer = rwNewT(uint8, header->totalNumVertex * stride, MEMDUR_EVENT | ID_GEOMETRY);
+				header->vertexBuffer = rwNewT(uint8, header->totalNumVertex * stride, static_cast<int>(MEMDUR_EVENT) | static_cast<int>(ID_GEOMETRY));
 				assert(header->vertexBufferGPU == nullptr);
 			}
 

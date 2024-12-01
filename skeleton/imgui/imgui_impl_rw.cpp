@@ -6,6 +6,8 @@
 #include "imgui_impl_rw.h"
 #include "imgui_impl_vulkan.h"
 
+// WE FORCE VULKAN FOR NOW
+
 using namespace rw::RWDEVICE;
 
 static rw::Texture* g_FontTexture;

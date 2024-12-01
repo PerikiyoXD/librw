@@ -177,7 +177,7 @@ namespace maple::shadow
 			{ ShaderType::Compute, "shaders/ShadowReprojection.comp.spv" }
 		});
 
-		constexpr char* str[4] = { "Accumulation", "GBuffer", "PrevGBuffer", "Args" };
+		constexpr const char* str[4] = { "Accumulation", "GBuffer", "PrevGBuffer", "Args" };
 		accumulator.descriptorSets.resize(4);
 		for (uint32_t i = 0; i < 4; i++)
 		{

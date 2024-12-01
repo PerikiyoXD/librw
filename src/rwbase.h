@@ -44,6 +44,10 @@
 #define RWDEVICE vulkan
 #endif
 
+#ifndef RWDEVICE
+#error "No device defined"
+#endif
+
 namespace rw {
 
 #ifdef RW_PS2
@@ -317,6 +321,11 @@ struct RawMatrix
 		};
 		float values[16];
 	};
+
+    RawMatrix(const V3d& r, float32 rw, const V3d& u, float32 uw, const V3d& a, float32 aw, const V3d& p, float32 pw)
+        : right(r), rightw(rw), up(u), upw(uw), at(a), atw(aw), pos(p), posw(pw) {}
+
+	RawMatrix(void) : rightw(0.0f), upw(0.0f), atw(0.0f), posw(1.0f) { setIdentity(this); }
 
 	float operator[](int32_t idx)const;
 	float& operator[](int32_t idx);
