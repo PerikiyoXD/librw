@@ -1,9 +1,10 @@
--- Console tools build for every backend. Windowed tools need skeleton, and so
--- a backend that can open a window.
+-- Console tools build for every device. Windowed tools need skeleton, and so
+-- a device that can open a window.
 --
--- The subsystem is set explicitly rather than left to chance: gl/rwgl3.h
--- exposes SDL/GLFW publicly, so the windowing package propagates to every
--- dependent, and SDL2 drags /SUBSYSTEM:WINDOWS along with it.
+-- Windowed tools are GUI binaries and say so. Console tools no longer need to
+-- force /SUBSYSTEM:CONSOLE: librw stopped exposing SDL/GLFW in its headers, so
+-- the windowing package is the host's dependency alone and SDL2main's
+-- /SUBSYSTEM:WINDOWS no longer reaches anything that only links librw.
 
 local CONSOLE_TOOLS = {
     "dumprwtree",
@@ -36,9 +37,6 @@ local function librw_tool(name, windowed)
             end
         else
             add_deps("librw")
-            if is_plat("windows") then
-                add_ldflags("/SUBSYSTEM:CONSOLE", {tools = {"link"}, force = true})
-            end
         end
     target_end()
 end

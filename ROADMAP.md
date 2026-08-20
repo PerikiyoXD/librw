@@ -66,12 +66,12 @@ compile-time GLES work was parked by renaming its guards to `xxxRW_GLES2`
 
 ## Known issues
 
-- `rwgl3.h` is a public header but exposes `SDL_Window**` and includes
-  `<SDL.h>`/`<GLFW/glfw3.h>`. librw currently creates the window and GL
-  context itself (`gl3device.cpp`, ~600 lines including three near-identical
-  SDL2/SDL3/GLFW implementations). Decision taken: **librw should receive a
-  context** instead. That removes the triplication and the layering violation
-  together.
+- Display topology is stubbed. `deviceSystemGL3` answers the monitor and
+  video-mode `DeviceReq` cases with a single mode derived from the current
+  framebuffer size, because only the host can enumerate displays and the host
+  does not expose them yet. Fullscreen and mode switching are therefore
+  unavailable on gl3. d3d9 still enumerates through `IDirect3D9`, so the two
+  devices disagree; the fix is a display-topology interface on the host.
 - `d3ddevice.cpp` and `gl3device.cpp` contain genuinely duplicated code, not
   merely parallel code: `getRenderState`, `setDepthTest`/`setDepthWrite`/
   `setVertexAlpha`, the `RwStateCache` structs and the state map tables. The
