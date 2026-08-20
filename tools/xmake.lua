@@ -28,7 +28,8 @@ local function librw_tool(name, windowed)
         add_files(name .. "/*.cpp")
 
         if windowed then
-            add_deps("librw", "skeleton")
+            -- host owns the entry point (main / WinMain)
+            add_deps("librw", "skeleton", "host")
             if is_plat("windows") then
                 add_ldflags("/SUBSYSTEM:WINDOWS", "/ENTRY:WinMainCRTStartup",
                             {tools = {"link"}, force = true})

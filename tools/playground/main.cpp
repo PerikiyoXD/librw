@@ -12,7 +12,6 @@ struct SceneGlobals {
 } Scene;
 rw::Texture *tex, *tex2;
 rw::Raster *testras;
-rw::EngineOpenParams engineOpenParams;
 
 rw::Texture *frontbuffer;
 

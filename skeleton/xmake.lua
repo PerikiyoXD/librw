@@ -17,7 +17,8 @@ target("skeleton")
     -- the LIBRW_* define, so the inactive ones compile to nothing.
     add_files("*.cpp")
 
-    add_deps("librw", "imgui")
+    -- host: skeleton is the app that supplies host::callbacks.
+    add_deps("librw", "imgui", "host")
 
     local gfxpkg = librw_gfxlib_package()
     if gfxpkg then

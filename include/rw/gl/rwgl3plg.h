@@ -1,3 +1,6 @@
+#ifndef RW_GL_RWGL3PLG_H
+#define RW_GL_RWGL3PLG_H
+
 namespace rw {
 namespace gl3 {
 
@@ -14,3 +17,5 @@ void uploadSkinMatrices(Atomic *atomic);
 
 }
 }
+
+#endif

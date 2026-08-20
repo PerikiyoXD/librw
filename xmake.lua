@@ -63,4 +63,4 @@ if gfx then
     add_requires(gfx.package, gfx.alias and {alias = gfx.alias} or nil)
 end
 
-includes("vendor", "src", "skeleton", "tools")
+includes("vendor", "src", "host", "skeleton", "tools")

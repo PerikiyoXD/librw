@@ -1,3 +1,6 @@
+#ifndef RW_GL_RWWDGL_H
+#define RW_GL_RWWDGL_H
+
 
 namespace rw {
 namespace wdgl {
@@ -86,3 +89,5 @@ void registerNativeRaster(void);
 
 }
 }
+
+#endif

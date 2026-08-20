@@ -1,3 +1,6 @@
+#ifndef RW_ARGS_H
+#define RW_ARGS_H
+
 extern char *argv0;
 #define USED(x) ((void)x)
 #define SET(x) ((x)=0)
@@ -22,3 +25,4 @@ extern char *argv0;
 
 #define	ARGC()		_argc
 
+#endif

@@ -1,3 +1,6 @@
+#ifndef RW_BASE_H
+#define RW_BASE_H
+
 #include "librwconf.h"
 
 #ifndef RW_PS2
@@ -682,3 +685,5 @@ bool findChunk(Stream *s, uint32 type, uint32 *length, uint32 *version);
 int32 findPointer(void *p, void **list, int32 num);
 uint8 *getFileContents(const char *name, uint32 *len);
 }
+
+#endif

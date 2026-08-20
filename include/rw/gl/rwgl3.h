@@ -1,3 +1,6 @@
+#ifndef RW_GL_RWGL3_H
+#define RW_GL_RWGL3_H
+
 #ifdef RW_GL3
 #include "glad/glad.h"
 #ifdef LIBRW_SDL2
@@ -315,4 +318,6 @@ void registerNativeRaster(void);
  * RWDEVICE macro drifted. Keeping the two together makes that impossible. */
 #ifdef RW_GL3
 namespace rw { namespace backend = gl3; }
+#endif
+
 #endif

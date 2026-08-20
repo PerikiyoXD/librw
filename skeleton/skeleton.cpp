@@ -15,7 +15,7 @@ InitRW(void)
 		return false;
 	if(AppEventHandler(sk::PLUGINATTACH, nil) == EVENTERROR)
 		return false;
-	if(!rw::Engine::open(&engineOpenParams))
+	if(!rw::Engine::open(&host::engineOpenParams))
 		return false;
 
 	SubSystemInfo info;
@@ -163,6 +163,12 @@ CameraRotate(Camera *cam, V3d *pos, float angle)
 	frame->translate(&negTrans);
 }
 
+void
+SetMousePosition(int x, int y)
+{
+	host::setMousePosition(x, y);
+}
+
 EventStatus
 EventHandler(Event e, void *param)
 {
@@ -188,5 +194,77 @@ EventHandler(Event e, void *param)
 		}
 	return s;
 }
+
+}
+
+/* ------------------------------------------------------------------------
+ * The host->app seam.
+ *
+ * host/ owns the entry point and the event loop and knows nothing about RW
+ * or about sk::EventHandler. Everything it delivers arrives through this
+ * table, which skeleton -- as the app -- defines.
+ * --------------------------------------------------------------------- */
+
+namespace {
+
+bool
+hostInitialize(int argc, char **argv)
+{
+	sk::args.argc = argc;
+	sk::args.argv = argv;
+
+	if(sk::EventHandler(sk::INITIALIZE, nil) == sk::EVENTERROR)
+		return false;
+
+	/* The app sets sk::globals during INITIALIZE; hand that to the host,
+	 * which has not created a window yet. */
+	host::config.title  = sk::globals.windowtitle;
+	host::config.width  = sk::globals.width;
+	host::config.height = sk::globals.height;
+	return true;
+}
+
+bool hostRwInitialize(void)
+{
+	return sk::EventHandler(sk::RWINITIALIZE, nil) != sk::EVENTERROR;
+}
+
+void hostRwTerminate(void)  { sk::EventHandler(sk::RWTERMINATE, nil); }
+bool hostShouldQuit(void)   { return sk::globals.quit != 0; }
+
+void hostKeyDown(int key)   { sk::EventHandler(sk::KEYDOWN, &key); }
+void hostKeyUp(int key)     { sk::EventHandler(sk::KEYUP, &key); }
+void hostCharInput(int c)   { sk::EventHandler(sk::CHARINPUT, (void*)(rw::uintptr)c); }
+
+void hostMouseMove(const host::MouseState *m)
+	{ sk::EventHandler(sk::MOUSEMOVE, (void*)m); }
+void hostMouseButton(const host::MouseState *m)
+	{ sk::EventHandler(sk::MOUSEBTN, (void*)m); }
+void hostMouseWheel(const host::MouseState *m)
+	{ sk::EventHandler(sk::MOUSEWHEEL, (void*)m); }
+
+void hostResize(rw::Rect *r) { sk::EventHandler(sk::RESIZE, r); }
+void hostIdle(float dt)      { sk::EventHandler(sk::IDLE, &dt); }
+
+}
+
+namespace host {
+
+Callbacks callbacks = {
+	hostInitialize,
+	hostRwInitialize,
+	hostRwTerminate,
+	hostShouldQuit,
+
+	hostKeyDown,
+	hostKeyUp,
+	hostCharInput,
+	hostMouseMove,
+	hostMouseButton,
+	hostMouseWheel,
+
+	hostResize,
+	hostIdle,
+};
 
 }

@@ -1,3 +1,6 @@
+#ifndef RW_D3D_RWD3D_H
+#define RW_D3D_RWD3D_H
+
 #ifdef RW_D3D9
 #ifdef WITH_D3D
 #include <d3d9.h>
@@ -434,3 +437,5 @@ namespace rw { namespace backend = d3d; }
 /* Deliberately not defined for RW_D3D8: Im2DVertex/Im3DVertex above are inside
  * the RW_D3D9 guard, so rw::d3d is empty under d3d8 and an alias to it would be
  * the very drift this is meant to prevent. d3d8 needs those types first. */
+
+#endif

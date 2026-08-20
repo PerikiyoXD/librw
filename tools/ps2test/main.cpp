@@ -636,7 +636,6 @@ beginCamera(void)
 	f[3] = 0.0f;
 }
 
-rw::EngineOpenParams engineOpenParams;
 
 void
 pluginattach(void)

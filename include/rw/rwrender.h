@@ -1,3 +1,6 @@
+#ifndef RW_RENDER_H
+#define RW_RENDER_H
+
 namespace rw {
 
 // Render states
@@ -138,3 +141,4 @@ void End(void);
 
 }
 
+#endif

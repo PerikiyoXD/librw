@@ -1,3 +1,6 @@
+#ifndef RW_OBJECTS_H
+#define RW_OBJECTS_H
+
 #include <stddef.h>
 
 namespace rw {
@@ -904,3 +907,5 @@ struct TexDictionary
 };
 
 }
+
+#endif

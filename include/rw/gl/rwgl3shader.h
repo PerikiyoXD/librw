@@ -1,3 +1,6 @@
+#ifndef RW_GL_RWGL3SHADER_H
+#define RW_GL_RWGL3SHADER_H
+
 #ifdef RW_OPENGL
 
 namespace rw {
@@ -65,5 +68,7 @@ extern Shader *currentShader;
 
 }
 }
+
+#endif
 
 #endif

@@ -1,3 +1,6 @@
+#ifndef RW_PS2_RWPS2PLG_H
+#define RW_PS2_RWPS2PLG_H
+
 namespace rw {
 namespace ps2 {
 
@@ -25,3 +28,5 @@ void skinPostCB(MatPipeline*, Geometry*);
 
 }
 }
+
+#endif

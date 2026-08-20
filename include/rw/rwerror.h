@@ -1,3 +1,6 @@
+#ifndef RW_ERROR_H
+#define RW_ERROR_H
+
 namespace rw {
 
 struct Error
@@ -23,3 +26,5 @@ char *dbgsprint(uint32 code, ...);
 }while(0)
 
 }
+
+#endif

@@ -4,7 +4,6 @@
 
 #include "im3d.h"
 
-rw::EngineOpenParams engineOpenParams;
 
 rw::RGBA ForegroundColor = { 200, 200, 200, 255 };
 rw::RGBA BackgroundColor = { 64, 64, 64, 0 };

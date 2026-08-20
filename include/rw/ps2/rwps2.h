@@ -1,3 +1,6 @@
+#ifndef RW_PS2_RWPS2_H
+#define RW_PS2_RWPS2_H
+
 namespace rw {
 
 #ifdef RW_PS2
@@ -289,4 +292,6 @@ uint32 getSizeNativeTexture(Texture *tex);
  * RWDEVICE macro drifted. Keeping the two together makes that impossible. */
 #ifdef RW_PS2
 namespace rw { namespace backend = ps2; }
+#endif
+
 #endif

@@ -1,3 +1,6 @@
+#ifndef RW_H
+#define RW_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -23,3 +26,5 @@
 #include "rw/gl/rwgl3.h"
 #include "rw/gl/rwgl3shader.h"
 #include "rw/gl/rwgl3plg.h"
+
+#endif

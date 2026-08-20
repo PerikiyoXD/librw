@@ -1,3 +1,6 @@
+#ifndef RW_D3D_RWXBOX_H
+#define RW_D3D_RWXBOX_H
+
 namespace rw {
 namespace xbox {
 
@@ -193,3 +196,5 @@ enum {
 
 }
 }
+
+#endif

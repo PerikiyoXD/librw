@@ -1,3 +1,6 @@
+#ifndef RW_CHARSET_H
+#define RW_CHARSET_H
+
 namespace rw {
 
 struct Charset
@@ -23,3 +26,5 @@ private:
 };
 
 }
+
+#endif

@@ -1,3 +1,6 @@
+#ifndef RW_ANIM_H
+#define RW_ANIM_H
+
 #include <stddef.h>
 
 namespace rw {
@@ -193,3 +196,5 @@ extern int32 uvAnimOffset;
 void registerUVAnimPlugin(void);
 
 }
+
+#endif

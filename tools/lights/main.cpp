@@ -6,7 +6,6 @@
 #include "lights.h"
 
 rw::V3d zero = { 0.0f, 0.0f, 0.0f };
-rw::EngineOpenParams engineOpenParams;
 float FOV = 70.0f;
 
 rw::RGBA ForegroundColor = { 200, 200, 200, 255 };

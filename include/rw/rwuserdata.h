@@ -1,3 +1,6 @@
+#ifndef RW_USERDATA_H
+#define RW_USERDATA_H
+
 namespace rw {
 
 enum UserDataType
@@ -92,3 +95,5 @@ extern UserDataGlobals userDataGlobals;
 void registerUserDataPlugin(void);
 
 }
+
+#endif

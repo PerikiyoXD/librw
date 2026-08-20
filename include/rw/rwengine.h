@@ -1,3 +1,6 @@
+#ifndef RW_ENGINE_H
+#define RW_ENGINE_H
+
 namespace rw {
 
 // uhhhm..... why are these not actual functions?
@@ -273,3 +276,5 @@ namespace null {
 }
 
 }
+
+#endif
