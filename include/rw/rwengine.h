@@ -98,7 +98,39 @@ struct Driver
 	}
 };
 
-struct EngineOpenParams;
+/* What the host hands librw at Engine::open().
+ *
+ * librw does not create windows or GL contexts -- the host does, and passes
+ * the result in here. Everything is either an opaque handle librw never
+ * dereferences, or a callback librw uses to reach the window system. That is
+ * what keeps SDL and GLFW out of librw's headers entirely.
+ *
+ * Previously this struct was defined three times, once per device header,
+ * with different members; only one was live per build. */
+struct EngineOpenParams
+{
+	/* Native window handle. HWND for d3d9, an opaque toolkit handle for
+	 * gl3. librw only ever hands it back to the callbacks below. */
+	void *window;
+
+	/* --- GL devices only --------------------------------------------- */
+
+	void *glcontext;		/* created and made current by the host */
+
+	/* What the host created, so librw picks the right GL loader. */
+	bool32 gles;
+	int32  glversion;		/* major*10 + minor, e.g. 33 */
+
+	void *(*getProc)(const char *name);
+	void  (*swapBuffers)(void *window);
+	void  (*setSwapInterval)(void *window, int interval);
+	void  (*getFramebufferSize)(void *window, int *w, int *h);
+
+	/* --- all devices -------------------------------------------------- */
+
+	int32 width, height;
+	const char *windowtitle;
+};
 
 enum MemHint
 {

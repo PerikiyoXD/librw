@@ -1507,7 +1507,7 @@ makeVideoModeList(void)
 static int
 openD3D(EngineOpenParams *params)
 {
-	HWND win = params->window;
+	HWND win = (HWND)params->window;
 
 	d3d9Globals.window = win;
 	d3d9Globals.numAdapters = 0;

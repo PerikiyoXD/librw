@@ -287,7 +287,7 @@ void
 setMousePosition(int x, int y)
 {
 	POINT pos = { x, y };
-	ClientToScreen(engineOpenParams.window, &pos);
+	ClientToScreen((HWND)engineOpenParams.window, &pos);
 	SetCursorPos(pos.x, pos.y);
 }
 
@@ -295,7 +295,13 @@ setMousePosition(int x, int y)
 
 #endif
 
-#ifdef RW_OPENGL
+/* The GL hosts define main(), but the tools link as /SUBSYSTEM:WINDOWS and so
+ * the CRT looks for WinMain. Bridge the two here.
+ *
+ * Not for SDL2: SDL2main.lib already provides a WinMain that calls SDL_main,
+ * and defining another is a duplicate symbol. SDL3 dropped that library, so
+ * sdl3 needs this shim just like glfw does. */
+#if defined(RW_OPENGL) && !defined(LIBRW_SDL2)
 int main(int argc, char *argv[]);
 
 int WINAPI

@@ -22,58 +22,17 @@ void im3DRenderPrimitive(PrimitiveType primType);
 void im3DRenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndices);
 void im3DEnd(void);
 
-struct DisplayMode
-{
-#ifdef LIBRW_SDL2
-	SDL_DisplayMode mode;
-#elif defined(LIBRW_SDL3)
-	SDL_DisplayMode mode;
-#elif defined(LIBRW_GLFW)
-	GLFWvidmode mode;
-#else
-	not implemented
-#endif
-	int32 depth;
-	uint32 flags;
-};
-
+/* The surface the host created, plus what librw derived from it.
+ *
+ * No SDL_Window*, no GLFWwindow*, no monitor handles: librw does not create
+ * or enumerate those any more. Everything windowing-shaped arrives through
+ * EngineOpenParams and is reached through its callbacks. */
 struct GlGlobals
 {
-#ifdef LIBRW_SDL2
-	SDL_Window **pWindow;
-	SDL_Window *window;
-	SDL_GLContext glcontext;
+	EngineOpenParams surface;	/* copy of what the host passed in */
 
-	int numDisplays;
-	int currentDisplay;
-#elif defined(LIBRW_SDL3)
-	SDL_Window **pWindow;
-	SDL_Window *window;
-	SDL_GLContext glcontext;
-
-	int numDisplays;
-	int currentDisplay;
-#elif defined(LIBRW_GLFW)
-	GLFWwindow **pWindow;
-	GLFWwindow *window;
-
-	GLFWmonitor *monitor;
-	int numMonitors;
-	int currentMonitor;
-#else
-	not implemented
-#endif
-
-	DisplayMode *modes;
-	int numModes;
-	int currentMode;
 	int presentWidth, presentHeight;
 	int presentOffX, presentOffY;
-
-	// for opening the window
-	int winWidth, winHeight;
-	const char *winTitle;
-	uint32 numSamples;
 };
 
 extern GlGlobals glGlobals;

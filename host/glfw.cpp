@@ -1,5 +1,7 @@
 #ifdef LIBRW_GLFW
 
+#include <stdio.h>
+#include <GLFW/glfw3.h>
 #include <rw.h>
 #include "host.h"
 
@@ -216,16 +218,82 @@ mousewheel(GLFWwindow *window, double x, double y)
 	if(callbacks.mouseWheel) callbacks.mouseWheel(&ms);
 }
 
+/* Window and GL context creation. This moved out of librw's gl3device.cpp:
+ * context attributes are window-creation hints, so choosing a profile and
+ * creating the window are one operation and cannot be split across the
+ * boundary. */
+
+static void
+glfwerr(int error, const char *desc)
+{
+	fprintf(stderr, "GLFW Error: %s\n", desc);
+}
+
+static void *procThunk(const char *name)   { return (void*)glfwGetProcAddress(name); }
+static void  swapThunk(void *w)            { glfwSwapBuffers((GLFWwindow*)w); }
+static void  intervalThunk(void *w, int i) { glfwSwapInterval(i); }
+static void  sizeThunk(void *w, int *ww, int *hh)
+	{ glfwGetFramebufferSize((GLFWwindow*)w, ww, hh); }
+
+static bool
+createSurface(void)
+{
+	static const struct { int api, major, minor; } profiles[] = {
+		{ GLFW_OPENGL_API,    3, 3 },
+		{ GLFW_OPENGL_API,    2, 1 },
+		{ GLFW_OPENGL_ES_API, 3, 1 },
+		{ GLFW_OPENGL_ES_API, 2, 0 },
+		{ 0, 0, 0 },
+	};
+
+	if(!glfwInit()){
+		fprintf(stderr, "glfwInit() failed\n");
+		return false;
+	}
+	glfwSetErrorCallback(glfwerr);
+
+	/* GLX rounds 1 sample up to 2x or 4x, so only hint when we mean it. */
+	if(host::config.numSamples > 1)
+		glfwWindowHint(GLFW_SAMPLES, host::config.numSamples);
+
+	int i;
+	for(i = 0; profiles[i].api; i++){
+		glfwWindowHint(GLFW_CLIENT_API, profiles[i].api);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, profiles[i].major);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, profiles[i].minor);
+		window = glfwCreateWindow(host::config.width, host::config.height,
+			host::config.title, nil, nil);
+		if(window)
+			break;
+	}
+	if(window == nil){
+		fprintf(stderr, "glfwCreateWindow() failed\n");
+		return false;
+	}
+	glfwMakeContextCurrent(window);
+
+	engineOpenParams.window      = window;
+	engineOpenParams.glcontext   = nil;	/* glfw keeps it internal */
+	engineOpenParams.gles        = profiles[i].api == GLFW_OPENGL_ES_API;
+	engineOpenParams.glversion   = profiles[i].major*10 + profiles[i].minor;
+	engineOpenParams.getProc     = procThunk;
+	engineOpenParams.swapBuffers = swapThunk;
+	engineOpenParams.setSwapInterval   = intervalThunk;
+	engineOpenParams.getFramebufferSize = sizeThunk;
+	engineOpenParams.width       = host::config.width;
+	engineOpenParams.height      = host::config.height;
+	engineOpenParams.windowtitle = host::config.title;
+	return true;
+}
+
 int
 main(int argc, char *argv[])
 {
 	if(callbacks.initialize && !callbacks.initialize(argc, argv))
 		return 0;
 
-	engineOpenParams.width = host::config.width;
-	engineOpenParams.height = host::config.height;
-	engineOpenParams.windowtitle = host::config.title;
-	engineOpenParams.window = &window;
+	if(!createSurface())
+		return 0;
 
 	if(callbacks.rwInitialize && !callbacks.rwInitialize())
 		return 0;
@@ -251,6 +319,9 @@ main(int argc, char *argv[])
 
 	if(callbacks.rwTerminate) callbacks.rwTerminate();
 
+	glfwDestroyWindow(window);
+	glfwTerminate();
+
 	return 0;
 }
 
@@ -259,7 +330,7 @@ namespace host {
 void
 setMousePosition(int x, int y)
 {
-	glfwSetCursorPos(*engineOpenParams.window, (double)x, (double)y);
+	glfwSetCursorPos(window, (double)x, (double)y);
 }
 
 }

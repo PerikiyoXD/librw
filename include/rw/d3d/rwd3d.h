@@ -11,17 +11,6 @@ namespace rw {
 
 #ifdef RW_D3D9
 
-#ifdef _WINDOWS_
-struct EngineOpenParams
-{
-	HWND window;
-};
-#else
-struct EngineOpenParams
-{
-	uint32 please_include_windows_h;
-};
-#endif
 #else
 #ifdef _D3D9_H_
 #error "please don't include d3d9.h for non-d3d9 platforms"

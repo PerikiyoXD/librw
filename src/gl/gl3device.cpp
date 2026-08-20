@@ -1244,15 +1244,7 @@ getFramebufferRect(Raster *frameBuffer)
 	Rect r;
 	Raster *fb = frameBuffer->parent;
 	if(fb->type == Raster::CAMERA){
-#ifdef LIBRW_SDL2
-		SDL_GetWindowSize(glGlobals.window, &r.w, &r.h);
-#elif defined(LIBRW_SDL3)
-		SDL_GetWindowSize(glGlobals.window, &r.w, &r.h);
-#elif defined(LIBRW_GLFW)
-		glfwGetFramebufferSize(glGlobals.window, &r.w, &r.h);
-#else
-		missing implementation
-#endif
+		glGlobals.surface.getFramebufferSize(glGlobals.surface.window, &r.w, &r.h);
 	}else{
 		r.w = fb->width;
 		r.h = fb->height;
@@ -1407,30 +1399,9 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 static void
 showRaster(Raster *raster, uint32 flags)
 {
-//	glViewport(raster->offsetX, raster->offsetY,
-//		raster->width, raster->height);
-
-#ifdef LIBRW_SDL2
-	if(flags & Raster::FLIPWAITVSYNCH)
-		SDL_GL_SetSwapInterval(1);
-	else
-		SDL_GL_SetSwapInterval(0);
-	SDL_GL_SwapWindow(glGlobals.window);
-#elif defined(LIBRW_SDL3)
-	if(flags & Raster::FLIPWAITVSYNCH)
-		SDL_GL_SetSwapInterval(1);
-	else
-		SDL_GL_SetSwapInterval(0);
-	SDL_GL_SwapWindow(glGlobals.window);
-#elif defined(LIBRW_GLFW)
-	if(flags & Raster::FLIPWAITVSYNCH)
-		glfwSwapInterval(1);
-	else
-		glfwSwapInterval(0);
-	glfwSwapBuffers(glGlobals.window);
-#else
-	not implemented
-#endif
+	EngineOpenParams *sf = &glGlobals.surface;
+	sf->setSwapInterval(sf->window, flags & Raster::FLIPWAITVSYNCH ? 1 : 0);
+	sf->swapBuffers(sf->window);
 }
 
 static bool32
@@ -1459,148 +1430,49 @@ rasterRenderFast(Raster *raster, int32 x, int32 y)
 	return 0;
 }
 
-#ifdef LIBRW_SDL2
-
-static void
-addVideoMode(int displayIndex, int modeIndex)
-{
-	int i;
-	SDL_DisplayMode mode;
-
-	SDL_GetDisplayMode(displayIndex, modeIndex, &mode);
-
-	for(i = 1; i < glGlobals.numModes; i++){
-		if(glGlobals.modes[i].mode.w == mode.w &&
-		   glGlobals.modes[i].mode.h == mode.h &&
-		   glGlobals.modes[i].mode.format == mode.format){
-			// had this mode already, remember highest refresh rate
-			if(mode.refresh_rate > glGlobals.modes[i].mode.refresh_rate)
-				glGlobals.modes[i].mode.refresh_rate = mode.refresh_rate;
-			return;
-		}
-	}
-
-	// none found, add
-	glGlobals.modes[glGlobals.numModes].mode = mode;
-	glGlobals.modes[glGlobals.numModes].flags = VIDEOMODEEXCLUSIVE;
-	glGlobals.numModes++;
-}
-
-static void
-makeVideoModeList(int displayIndex)
-{
-	int i, num, depth;
-
-	num = SDL_GetNumDisplayModes(displayIndex);
-	rwFree(glGlobals.modes);
-	glGlobals.modes = rwNewT(DisplayMode, num+1, ID_DRIVER | MEMDUR_EVENT);
-
-	SDL_GetCurrentDisplayMode(displayIndex, &glGlobals.modes[0].mode);
-	glGlobals.modes[0].flags = 0;
-	glGlobals.numModes = 1;
-
-	for(i = 0; i < num; i++)
-		addVideoMode(displayIndex, i);
-
-	for(i = 0; i < glGlobals.numModes; i++){
-		depth = SDL_BITSPERPIXEL(glGlobals.modes[i].mode.format);
-		// set depth to power of two
-		for(glGlobals.modes[i].depth = 1; glGlobals.modes[i].depth < depth; glGlobals.modes[i].depth <<= 1);
-	}
-}
+/* The host created the window and the GL context and made it current; all
+ * librw does here is remember the surface. Window creation, the context
+ * profile ladder, video-mode enumeration and monitor handling used to live
+ * in this file, three times over -- once per windowing library. They are in
+ * host/ now. */
 
 static int
-openSDL2(EngineOpenParams *openparams)
+openGL3(EngineOpenParams *params)
 {
-	glGlobals.winWidth = openparams->width;
-	glGlobals.winHeight = openparams->height;
-	glGlobals.winTitle = openparams->windowtitle;
-	glGlobals.pWindow = openparams->window;
-
 	memset(&gl3Caps, 0, sizeof(gl3Caps));
-
-	/* Init SDL */
-	if(SDL_InitSubSystem(SDL_INIT_VIDEO)){
-		RWERROR((ERR_GENERAL, SDL_GetError()));
-		return 0;
-	}
-
-	glGlobals.currentDisplay = 0;
-	glGlobals.numDisplays = SDL_GetNumVideoDisplays();
-
-	makeVideoModeList(glGlobals.currentDisplay);
-
+	glGlobals.surface = *params;
 	return 1;
 }
 
 static int
-closeSDL2(void)
+closeGL3(void)
 {
-	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+	memset(&glGlobals.surface, 0, sizeof(glGlobals.surface));
 	return 1;
 }
 
-static struct {
-	int gl;
-	int major, minor;
-} profiles[] = {
-	{ SDL_GL_CONTEXT_PROFILE_CORE, 3, 3 },
-	{ SDL_GL_CONTEXT_PROFILE_CORE, 2, 1 },
-	{ SDL_GL_CONTEXT_PROFILE_ES, 3, 1 },
-	{ SDL_GL_CONTEXT_PROFILE_ES, 2, 0 },
-	{ 0, 0, 0 },
-};
-
 static int
-startSDL2(void)
+startGL3(void)
 {
-	SDL_Window *win;
-	SDL_GLContext ctx;
-	DisplayMode *mode;
+	EngineOpenParams *sf = &glGlobals.surface;
 
-	mode = &glGlobals.modes[glGlobals.currentMode];
-
-	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, glGlobals.numSamples);
-
-	int i;
-	for(i = 0; profiles[i].gl; i++){
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profiles[i].gl);
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, profiles[i].major);
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, profiles[i].minor);
-
-		if(mode->flags & VIDEOMODEEXCLUSIVE) {
-			win = SDL_CreateWindow(glGlobals.winTitle, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, mode->mode.w, mode->mode.h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
-			if (win)
-				SDL_SetWindowDisplayMode(win, &mode->mode);
-		} else {
-			win = SDL_CreateWindow(glGlobals.winTitle, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, glGlobals.winWidth, glGlobals.winHeight, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-			if (win)
-				SDL_SetWindowDisplayMode(win, NULL);
-		}
-		if(win){
-			gl3Caps.gles = profiles[i].gl == SDL_GL_CONTEXT_PROFILE_ES;
-			gl3Caps.glversion = profiles[i].major*10 + profiles[i].minor;
-			break;
-		}
-	}
-	if(win == nil){
-		RWERROR((ERR_GENERAL, SDL_GetError()));
+	if(sf->window == nil || sf->getProc == nil){
+		RWERROR((ERR_GENERAL, "no GL surface supplied by the host"));
 		return 0;
 	}
-	ctx = SDL_GL_CreateContext(win);
 
-	if (!((gl3Caps.gles ? gladLoadGLES2Loader : gladLoadGLLoader) ((GLADloadproc) SDL_GL_GetProcAddress, gl3Caps.glversion)) ) {
+	/* The host told us what kind of context it made, so we know which
+	 * loader to use. Previously this came out of the profile ladder that
+	 * lived here. */
+	gl3Caps.gles = sf->gles;
+	gl3Caps.glversion = sf->glversion;
+
+	if(!((gl3Caps.gles ? gladLoadGLES2Loader : gladLoadGLLoader)
+	     ((GLADloadproc)sf->getProc, gl3Caps.glversion))){
 		RWERROR((ERR_GENERAL, "gladLoadGLLoader failed"));
-		SDL_GL_DeleteContext(ctx);
-		SDL_DestroyWindow(win);
 		return 0;
 	}
 
-//	printf("OpenGL version: %s\n", glGetString(GL_VERSION));
-
-	glGlobals.window = win;
-	glGlobals.glcontext = ctx;
-	*glGlobals.pWindow = win;
 	glGlobals.presentWidth = 0;
 	glGlobals.presentHeight = 0;
 	glGlobals.presentOffX = 0;
@@ -1609,346 +1481,10 @@ startSDL2(void)
 }
 
 static int
-stopSDL2(void)
+stopGL3(void)
 {
-	SDL_GL_DeleteContext(glGlobals.glcontext);
-	SDL_DestroyWindow(glGlobals.window);
 	return 1;
 }
-
-#elif defined(LIBRW_SDL3)
-
-static void
-addVideoMode(const SDL_DisplayMode *mode)
-{
-	int i;
-
-	for(i = 1; i < glGlobals.numModes; i++){
-		if(glGlobals.modes[i].mode.w == mode->w &&
-		   glGlobals.modes[i].mode.h == mode->h &&
-		   glGlobals.modes[i].mode.format == mode->format){
-			// had this mode already, remember highest refresh rate
-			if(mode->refresh_rate > glGlobals.modes[i].mode.refresh_rate)
-				glGlobals.modes[i].mode.refresh_rate = mode->refresh_rate;
-			return;
-		}
-	}
-
-	// none found, add
-	glGlobals.modes[glGlobals.numModes].mode = *mode;
-	glGlobals.modes[glGlobals.numModes].flags = VIDEOMODEEXCLUSIVE;
-	glGlobals.numModes++;
-}
-
-static void
-makeVideoModeList(SDL_DisplayID displayIndex, SDL_DisplayID *displays)
-{
-	int i, num, depth;
-	const SDL_DisplayMode *currentMode;
-	SDL_DisplayMode **modes;
-
-	currentMode = SDL_GetCurrentDisplayMode(displays[displayIndex]);
-	modes = SDL_GetFullscreenDisplayModes(displayIndex, &num);
-
-	rwFree(glGlobals.modes);
-	glGlobals.modes = rwNewT(DisplayMode, num+(currentMode != NULL ? 1 : 0), ID_DRIVER | MEMDUR_EVENT);
-
-	if (currentMode) {
-		glGlobals.modes[0].mode = *currentMode;
-		glGlobals.modes[0].flags = 0;
-		glGlobals.numModes = 1;
-	}
-
-	for(i = 0; i < num; i++)
-		addVideoMode(modes[i]);
-
-	for(i = 0; i < glGlobals.numModes; i++){
-		depth = SDL_BITSPERPIXEL(glGlobals.modes[i].mode.format);
-		// set depth to power of two
-		for(glGlobals.modes[i].depth = 1; glGlobals.modes[i].depth < depth; glGlobals.modes[i].depth <<= 1);
-	}
-	SDL_free(modes);
-}
-
-static int
-openSDL3(EngineOpenParams *openparams)
-{
-	glGlobals.winWidth = openparams->width;
-	glGlobals.winHeight = openparams->height;
-	glGlobals.winTitle = openparams->windowtitle;
-	glGlobals.pWindow = openparams->window;
-
-	memset(&gl3Caps, 0, sizeof(gl3Caps));
-
-	/* Init SDL */
-	if (!SDL_InitSubSystem(SDL_INIT_VIDEO)){
-		RWERROR((ERR_GENERAL, SDL_GetError()));
-		return 0;
-	}
-
-	glGlobals.currentDisplay = 0;
-	SDL_DisplayID *displays = SDL_GetDisplays(&glGlobals.numDisplays);
-
-	if (glGlobals.currentDisplay >= glGlobals.numDisplays) {
-		RWERROR((ERR_GENERAL, SDL_GetError()));
-		return 0;
-	}
-
-	makeVideoModeList(glGlobals.currentDisplay, displays);
-	SDL_free(displays);
-
-	return 1;
-}
-
-static int
-closeSDL3(void)
-{
-	SDL_QuitSubSystem(SDL_INIT_VIDEO);
-	return 1;
-}
-
-static struct {
-	int gl;
-	int major, minor;
-} profiles[] = {
-	{ SDL_GL_CONTEXT_PROFILE_CORE, 3, 3 },
-	{ SDL_GL_CONTEXT_PROFILE_CORE, 2, 1 },
-	{ SDL_GL_CONTEXT_PROFILE_ES, 3, 1 },
-	{ SDL_GL_CONTEXT_PROFILE_ES, 2, 0 },
-	{ 0, 0, 0 },
-};
-
-static int
-startSDL3(void)
-{
-	SDL_Window *win;
-	SDL_GLContext ctx;
-	DisplayMode *mode;
-
-	mode = &glGlobals.modes[glGlobals.currentMode];
-
-	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, glGlobals.numSamples);
-
-	int i;
-	for(i = 0; profiles[i].gl; i++){
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profiles[i].gl);
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, profiles[i].major);
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, profiles[i].minor);
-
-		if(mode->flags & VIDEOMODEEXCLUSIVE) {
-			win = SDL_CreateWindow(glGlobals.winTitle, mode->mode.w, mode->mode.h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
-			if (win)
-				SDL_SetWindowFullscreenMode(win, &mode->mode);
-		} else {
-			win = SDL_CreateWindow(glGlobals.winTitle, glGlobals.winWidth, glGlobals.winHeight, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-			if (win)
-				SDL_SetWindowFullscreenMode(win, NULL);
-		}
-		if(win){
-			gl3Caps.gles = profiles[i].gl == SDL_GL_CONTEXT_PROFILE_ES;
-			gl3Caps.glversion = profiles[i].major*10 + profiles[i].minor;
-			break;
-		}
-	}
-	if(win == nil){
-		RWERROR((ERR_GENERAL, SDL_GetError()));
-		return 0;
-	}
-	ctx = SDL_GL_CreateContext(win);
-
-	if (!((gl3Caps.gles ? gladLoadGLES2Loader : gladLoadGLLoader) ((GLADloadproc) SDL_GL_GetProcAddress, gl3Caps.glversion)) ) {
-		RWERROR((ERR_GENERAL, "gladLoadGLLoader failed"));
-		SDL_GL_DestroyContext(ctx);
-		SDL_DestroyWindow(win);
-		return 0;
-	}
-
-//	printf("OpenGL version: %s\n", glGetString(GL_VERSION));
-
-	glGlobals.window = win;
-	glGlobals.glcontext = ctx;
-	*glGlobals.pWindow = win;
-	glGlobals.presentWidth = 0;
-	glGlobals.presentHeight = 0;
-	glGlobals.presentOffX = 0;
-	glGlobals.presentOffY = 0;
-	return 1;
-}
-
-static int
-stopSDL3(void)
-{
-	SDL_GL_DestroyContext(glGlobals.glcontext);
-	SDL_DestroyWindow(glGlobals.window);
-	return 1;
-}
-#elif defined(LIBRW_GLFW)
-
-static void
-addVideoMode(const GLFWvidmode *mode)
-{
-	int i;
-
-	for(i = 1; i < glGlobals.numModes; i++){
-		if(glGlobals.modes[i].mode.width == mode->width &&
-		   glGlobals.modes[i].mode.height == mode->height &&
-		   glGlobals.modes[i].mode.redBits == mode->redBits &&
-		   glGlobals.modes[i].mode.greenBits == mode->greenBits &&
-		   glGlobals.modes[i].mode.blueBits == mode->blueBits){
-			// had this mode already, remember highest refresh rate
-			if(mode->refreshRate > glGlobals.modes[i].mode.refreshRate)
-				glGlobals.modes[i].mode.refreshRate = mode->refreshRate;
-			return;
-		}
-	}
-
-	// none found, add
-	glGlobals.modes[glGlobals.numModes].mode = *mode;
-	glGlobals.modes[glGlobals.numModes].flags = VIDEOMODEEXCLUSIVE;
-	glGlobals.numModes++;
-}
-
-static void
-makeVideoModeList(GLFWmonitor *monitor)
-{
-	int i, num;
-	const GLFWvidmode *modes;
-
-	modes = glfwGetVideoModes(monitor, &num);
-	rwFree(glGlobals.modes);
-	glGlobals.modes = rwNewT(DisplayMode, num+1, ID_DRIVER | MEMDUR_EVENT);
-
-	glGlobals.modes[0].mode = *glfwGetVideoMode(monitor);
-	glGlobals.modes[0].flags = 0;
-	glGlobals.numModes = 1;
-
-	for(i = 0; i < num; i++)
-		addVideoMode(&modes[i]);
-
-	for(i = 0; i < glGlobals.numModes; i++){
-		num = glGlobals.modes[i].mode.redBits +
-			glGlobals.modes[i].mode.greenBits +
-			glGlobals.modes[i].mode.blueBits;
-		// set depth to power of two
-		for(glGlobals.modes[i].depth = 1; glGlobals.modes[i].depth < num; glGlobals.modes[i].depth <<= 1);
-	}
-}
-
-static int
-openGLFW(EngineOpenParams *openparams)
-{
-	glGlobals.winWidth = openparams->width;
-	glGlobals.winHeight = openparams->height;
-	glGlobals.winTitle = openparams->windowtitle;
-	glGlobals.pWindow = openparams->window;
-
-	memset(&gl3Caps, 0, sizeof(gl3Caps));
-
-	/* Init GLFW */
-	if(!glfwInit()){
-		RWERROR((ERR_GENERAL, "glfwInit() failed"));
-		return 0;
-	}
-
-	glGlobals.monitor = glfwGetMonitors(&glGlobals.numMonitors)[0];
-
-	makeVideoModeList(glGlobals.monitor);
-
-	return 1;
-}
-
-static int
-closeGLFW(void)
-{
-	glfwTerminate();
-	return 1;
-}
-
-static void
-glfwerr(int error, const char *desc)
-{
-	fprintf(stderr, "GLFW Error: %s\n", desc);
-}
-
-static struct {
-	int gl;
-	int major, minor;
-} profiles[] = {
-	{ GLFW_OPENGL_API, 3, 3 },
-	{ GLFW_OPENGL_API, 2, 1 },
-	{ GLFW_OPENGL_ES_API, 3, 1 },
-	{ GLFW_OPENGL_ES_API, 2, 0 },
-	{ 0, 0, 0 },
-};
-
-static int
-startGLFW(void)
-{
-	GLFWwindow *win;
-	DisplayMode *mode;
-
-	mode = &glGlobals.modes[glGlobals.currentMode];
-
-	glfwSetErrorCallback(glfwerr);
-	glfwWindowHint(GLFW_RED_BITS, mode->mode.redBits);
-	glfwWindowHint(GLFW_GREEN_BITS, mode->mode.greenBits);
-	glfwWindowHint(GLFW_BLUE_BITS, mode->mode.blueBits);
-	glfwWindowHint(GLFW_REFRESH_RATE, mode->mode.refreshRate);
-	
-	// GLX will round up to 2x or 4x if you ask for multisampling on with 1 sample
-	// So only apply the SAMPLES hint if we actually want multisampling
-	if (glGlobals.numSamples > 1)
-		glfwWindowHint(GLFW_SAMPLES, glGlobals.numSamples);
-
-	int i;
-	for(i = 0; profiles[i].gl; i++){
-		glfwWindowHint(GLFW_CLIENT_API, profiles[i].gl);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, profiles[i].major);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, profiles[i].minor);
-
-		if(mode->flags & VIDEOMODEEXCLUSIVE)
-			win = glfwCreateWindow(mode->mode.width, mode->mode.height, glGlobals.winTitle, glGlobals.monitor, nil);
-		else
-			win = glfwCreateWindow(glGlobals.winWidth, glGlobals.winHeight, glGlobals.winTitle, nil, nil);
-		if(win){
-			gl3Caps.gles = profiles[i].gl == GLFW_OPENGL_ES_API;
-			gl3Caps.glversion = profiles[i].major*10 + profiles[i].minor;
-			break;
-		}
-	}
-	if(win == nil){
-		RWERROR((ERR_GENERAL, "glfwCreateWindow() failed"));
-		return 0;
-	}
-	glfwMakeContextCurrent(win);
-
-	/* Init GLAD */
-	if (!((gl3Caps.gles ? gladLoadGLES2Loader : gladLoadGLLoader) ((GLADloadproc) glfwGetProcAddress, gl3Caps.glversion)) ) {
-		RWERROR((ERR_GENERAL, "gladLoadGLLoader failed"));
-		glfwDestroyWindow(win);
-		return 0;
-	}
-
-//	printf("OpenGL version: %s\n", glGetString(GL_VERSION));
-
-	glGlobals.window = win;
-	*glGlobals.pWindow = win;
-	glGlobals.presentWidth = 0;
-	glGlobals.presentHeight = 0;
-	glGlobals.presentOffX = 0;
-	glGlobals.presentOffY = 0;
-	return 1;
-}
-
-static int
-stopGLFW(void)
-{
-	glfwDestroyWindow(glGlobals.window);
-	return 1;
-}
-#else
-not implemented
-#endif
 
 static int
 initOpenGL(void)
@@ -2104,269 +1640,71 @@ finalizeOpenGL(void)
 	return 1;
 }
 
-#ifdef LIBRW_SDL2
-static int
-deviceSystemSDL2(DeviceReq req, void *arg, int32 n)
-{
-	VideoMode *rwmode;
+/* Display topology (monitors, video modes, multisampling) is the host's --
+ * only the owner of the display connection can answer it, and OpenGL has no
+ * concept of a monitor. Those requests are stubbed here rather than lying
+ * about a single fake mode. See ROADMAP.md. */
 
+static int
+deviceSystemGL3(DeviceReq req, void *arg, int32 n)
+{
 	switch(req){
 	case DEVICEOPEN:
-		return openSDL2((EngineOpenParams*)arg);
+		return openGL3((EngineOpenParams*)arg);
 	case DEVICECLOSE:
-		return closeSDL2();
+		return closeGL3();
 
 	case DEVICEINIT:
-		return startSDL2() && initOpenGL();
+		return startGL3() && initOpenGL();
 	case DEVICETERM:
-		return termOpenGL() && stopSDL2();
+		return termOpenGL() && stopGL3();
 
 	case DEVICEFINALIZE:
 		return finalizeOpenGL();
 
-
 	case DEVICEGETNUMSUBSYSTEMS:
-		return glGlobals.numDisplays;
-
-	case DEVICEGETCURRENTSUBSYSTEM:
-		return glGlobals.currentDisplay;
-
-	case DEVICESETSUBSYSTEM:
-		if (n >= SDL_GetNumVideoDisplays())
-			return 0;
-		glGlobals.currentDisplay = n;
-		return 1;
-
-	case DEVICEGETSUBSSYSTEMINFO: {
-		const char *display_name = SDL_GetDisplayName(n);
-		if (display_name == nil)
-			return 0;
-		strncpy(((SubSystemInfo*)arg)->name, display_name, sizeof(SubSystemInfo::name));
-		return 1;
-	}
-
-
 	case DEVICEGETNUMVIDEOMODES:
-		return glGlobals.numModes;
-
-	case DEVICEGETCURRENTVIDEOMODE:
-		return glGlobals.currentMode;
-
-	case DEVICESETVIDEOMODE:
-		if(n >= glGlobals.numModes)
-			return 0;
-		glGlobals.currentMode = n;
 		return 1;
-
-	case DEVICEGETVIDEOMODEINFO:
-		rwmode = (VideoMode*)arg;
-		rwmode->width = glGlobals.modes[n].mode.w;
-		rwmode->height = glGlobals.modes[n].mode.h;
-		rwmode->depth = glGlobals.modes[n].depth;
-		rwmode->flags = glGlobals.modes[n].flags;
-		return 1;
-
-	case DEVICEGETMAXMULTISAMPLINGLEVELS:
-		{
-			GLint maxSamples;
-			glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-			if(maxSamples == 0)
-				return 1;
-			return maxSamples;
-		}
-	case DEVICEGETMULTISAMPLINGLEVELS:
-		if(glGlobals.numSamples == 0)
-			return 1;
-		return glGlobals.numSamples;
-	case DEVICESETMULTISAMPLINGLEVELS:
-		glGlobals.numSamples = (uint32)n;
-		return 1;
-	default:
-		assert(0 && "not implemented");
-		return 0;
-	}
-	return 1;
-}
-
-#elif defined(LIBRW_SDL3)
-
-static int
-deviceSystemSDL3(DeviceReq req, void *arg, int32 n)
-{
-	VideoMode *rwmode;
-
-	switch(req){
-	case DEVICEOPEN:
-		return openSDL3((EngineOpenParams*)arg);
-	case DEVICECLOSE:
-		return closeSDL3();
-
-	case DEVICEINIT:
-		return startSDL3() && initOpenGL();
-	case DEVICETERM:
-		return termOpenGL() && stopSDL3();
-
-	case DEVICEFINALIZE:
-		return finalizeOpenGL();
-
-
-	case DEVICEGETNUMSUBSYSTEMS:
-		return glGlobals.numDisplays;
-
 	case DEVICEGETCURRENTSUBSYSTEM:
-		return glGlobals.currentDisplay;
-
-	case DEVICESETSUBSYSTEM:
-		if (n >= glGlobals.numDisplays)
-			return 0;
-		glGlobals.currentDisplay = n;
-		return 1;
-
-	case DEVICEGETSUBSSYSTEMINFO: {
-		const char *display_name = SDL_GetDisplayName(n);
-		if (display_name == nil)
-			return 0;
-		strncpy(((SubSystemInfo*)arg)->name, display_name, sizeof(SubSystemInfo::name));
-		return 1;
-	}
-
-
-	case DEVICEGETNUMVIDEOMODES:
-		return glGlobals.numModes;
-
 	case DEVICEGETCURRENTVIDEOMODE:
-		return glGlobals.currentMode;
-
-	case DEVICESETVIDEOMODE:
-		if(n >= glGlobals.numModes)
-			return 0;
-		glGlobals.currentMode = n;
-		return 1;
-
-	case DEVICEGETVIDEOMODEINFO:
-		if (n <= 0)
-			return 0;
-		rwmode = (VideoMode*)arg;
-		rwmode->width = glGlobals.modes[n].mode.w;
-		rwmode->height = glGlobals.modes[n].mode.h;
-		rwmode->depth = glGlobals.modes[n].depth;
-		rwmode->flags = glGlobals.modes[n].flags;
-		return 1;
-
-	case DEVICEGETMAXMULTISAMPLINGLEVELS:
-		{
-			GLint maxSamples;
-			glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-			if(maxSamples == 0)
-				return 1;
-			return maxSamples;
-		}
-	case DEVICEGETMULTISAMPLINGLEVELS:
-		if(glGlobals.numSamples == 0)
-			return 1;
-		return glGlobals.numSamples;
-	case DEVICESETMULTISAMPLINGLEVELS:
-		glGlobals.numSamples = (uint32)n;
-		return 1;
-	default:
-		assert(0 && "not implemented");
 		return 0;
-	}
-	return 1;
-}
-
-#elif defined(LIBRW_GLFW)
-
-static int
-deviceSystemGLFW(DeviceReq req, void *arg, int32 n)
-{
-	GLFWmonitor **monitors;
-	VideoMode *rwmode;
-
-	switch(req){
-	case DEVICEOPEN:
-		return openGLFW((EngineOpenParams*)arg);
-	case DEVICECLOSE:
-		return closeGLFW();
-
-	case DEVICEINIT:
-		return startGLFW() && initOpenGL();
-	case DEVICETERM:
-		return termOpenGL() && stopGLFW();
-
-	case DEVICEFINALIZE:
-		return finalizeOpenGL();
-
-
-	case DEVICEGETNUMSUBSYSTEMS:
-		return glGlobals.numMonitors;
-
-	case DEVICEGETCURRENTSUBSYSTEM:
-		return glGlobals.currentMonitor;
-
 	case DEVICESETSUBSYSTEM:
-		monitors = glfwGetMonitors(&glGlobals.numMonitors);
-		if(n >= glGlobals.numMonitors)
-			return 0;
-		glGlobals.currentMonitor = n;
-		glGlobals.monitor = monitors[glGlobals.currentMonitor];
-		return 1;
+	case DEVICESETVIDEOMODE:
+		return n == 0;
 
 	case DEVICEGETSUBSSYSTEMINFO:
-		monitors = glfwGetMonitors(&glGlobals.numMonitors);
-		if(n >= glGlobals.numMonitors)
-			return 0;
-		strncpy(((SubSystemInfo*)arg)->name, glfwGetMonitorName(monitors[n]), sizeof(SubSystemInfo::name));
+		strncpy(((SubSystemInfo*)arg)->name, "host",
+			sizeof(SubSystemInfo::name));
 		return 1;
 
-
-	case DEVICEGETNUMVIDEOMODES:
-		return glGlobals.numModes;
-
-	case DEVICEGETCURRENTVIDEOMODE:
-		return glGlobals.currentMode;
-
-	case DEVICESETVIDEOMODE:
-		if(n >= glGlobals.numModes)
-			return 0;
-		glGlobals.currentMode = n;
+	case DEVICEGETVIDEOMODEINFO: {
+		VideoMode *rwmode = (VideoMode*)arg;
+		int w = 0, h = 0;
+		glGlobals.surface.getFramebufferSize(glGlobals.surface.window, &w, &h);
+		rwmode->width = w;
+		rwmode->height = h;
+		rwmode->depth = 32;
+		rwmode->flags = 0;
 		return 1;
+	}
 
-	case DEVICEGETVIDEOMODEINFO:
-		rwmode = (VideoMode*)arg;
-		rwmode->width = glGlobals.modes[n].mode.width;
-		rwmode->height = glGlobals.modes[n].mode.height;
-		rwmode->depth = glGlobals.modes[n].depth;
-		rwmode->flags = glGlobals.modes[n].flags;
-		return 1;
-
-	case DEVICEGETMAXMULTISAMPLINGLEVELS:
-		{
-			GLint maxSamples;
-			glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-			if(maxSamples == 0)
-				return 1;
-			return maxSamples;
-		}
+	case DEVICEGETMAXMULTISAMPLINGLEVELS: {
+		GLint maxSamples;
+		glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+		return maxSamples == 0 ? 1 : maxSamples;
+	}
 	case DEVICEGETMULTISAMPLINGLEVELS:
-		if(glGlobals.numSamples == 0)
-			return 1;
-		return glGlobals.numSamples;
-	case DEVICESETMULTISAMPLINGLEVELS:
-		glGlobals.numSamples = (uint32)n;
 		return 1;
+	case DEVICESETMULTISAMPLINGLEVELS:
+		/* Chosen by the host at context creation. */
+		return n <= 1;
+
 	default:
 		assert(0 && "not implemented");
 		return 0;
 	}
 	return 1;
 }
-
-#else
-
-not implemented
-
-#endif
 
 Device renderdevice = {
 	-1.0f, 1.0f,
@@ -2385,15 +1723,7 @@ Device renderdevice = {
 	gl3::im3DRenderPrimitive,
 	gl3::im3DRenderIndexedPrimitive,
 	gl3::im3DEnd,
-#ifdef LIBRW_SDL2
-	gl3::deviceSystemSDL2
-#elif defined(LIBRW_SDL3)
-	gl3::deviceSystemSDL3
-#elif defined(LIBRW_GLFW)
-	gl3::deviceSystemGLFW
-#else
-	not implemented
-#endif
+	gl3::deviceSystemGL3
 };
 
 }

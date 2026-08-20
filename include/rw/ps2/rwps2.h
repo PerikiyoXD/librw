@@ -3,11 +3,6 @@
 
 namespace rw {
 
-#ifdef RW_PS2
-struct EngineOpenParams
-{
-};
-#endif
 
 namespace ps2 {
 

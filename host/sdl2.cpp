@@ -1,5 +1,7 @@
 #ifdef LIBRW_SDL2
 
+#include <stdio.h>
+#include <SDL.h>
 #include <rw.h>
 #include "host.h"
 
@@ -207,16 +209,78 @@ BUTTON_MIDDLE = 0x2,
 BUTTON_RIGHT = 0x4,
 };
 
+/* Window and GL context creation, moved out of librw's gl3device.cpp:
+ * context attributes are window-creation hints, so profile selection and
+ * window creation are one operation. */
+
+static SDL_GLContext glcontext;
+
+static void *procThunk(const char *name)   { return (void*)SDL_GL_GetProcAddress(name); }
+static void  swapThunk(void *w)            { SDL_GL_SwapWindow((SDL_Window*)w); }
+static void  intervalThunk(void *w, int i) { SDL_GL_SetSwapInterval(i); }
+static void  sizeThunk(void *w, int *ww, int *hh)
+	{ SDL_GetWindowSize((SDL_Window*)w, ww, hh); }
+
+static bool
+createSurface(void)
+{
+	static const struct { int profile, major, minor; } profiles[] = {
+		{ SDL_GL_CONTEXT_PROFILE_CORE, 3, 3 },
+		{ SDL_GL_CONTEXT_PROFILE_CORE, 2, 1 },
+		{ SDL_GL_CONTEXT_PROFILE_ES,   3, 1 },
+		{ SDL_GL_CONTEXT_PROFILE_ES,   2, 0 },
+		{ 0, 0, 0 },
+	};
+
+	if(!(SDL_InitSubSystem(SDL_INIT_VIDEO) == 0)){
+		fprintf(stderr, "SDL_InitSubSystem: %s\n", SDL_GetError());
+		return false;
+	}
+
+	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, host::config.numSamples);
+
+	int i;
+	for(i = 0; profiles[i].profile; i++){
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profiles[i].profile);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, profiles[i].major);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, profiles[i].minor);
+		window = SDL_CreateWindow(host::config.title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, host::config.width, host::config.height, SDL_WINDOW_RESIZABLE|SDL_WINDOW_OPENGL);
+		if(window)
+			break;
+	}
+	if(window == nil){
+		fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
+		return false;
+	}
+
+	glcontext = SDL_GL_CreateContext(window);
+	if(glcontext == nil){
+		fprintf(stderr, "SDL_GL_CreateContext: %s\n", SDL_GetError());
+		return false;
+	}
+
+	engineOpenParams.window      = window;
+	engineOpenParams.glcontext   = glcontext;
+	engineOpenParams.gles        = profiles[i].profile == SDL_GL_CONTEXT_PROFILE_ES;
+	engineOpenParams.glversion   = profiles[i].major*10 + profiles[i].minor;
+	engineOpenParams.getProc     = procThunk;
+	engineOpenParams.swapBuffers = swapThunk;
+	engineOpenParams.setSwapInterval    = intervalThunk;
+	engineOpenParams.getFramebufferSize = sizeThunk;
+	engineOpenParams.width       = host::config.width;
+	engineOpenParams.height      = host::config.height;
+	engineOpenParams.windowtitle = host::config.title;
+	return true;
+}
+
 int
 main(int argc, char *argv[])
 {
 	if(callbacks.initialize && !callbacks.initialize(argc, argv))
 		return 0;
 
-	engineOpenParams.width = host::config.width;
-	engineOpenParams.height = host::config.height;
-	engineOpenParams.windowtitle = host::config.title;
-	engineOpenParams.window = &window;
+	if(!createSurface())
+		return 0;
 
 	if(callbacks.rwInitialize && !callbacks.rwInitialize())
 		return 0;
@@ -307,6 +371,10 @@ main(int argc, char *argv[])
 
 	if(callbacks.rwTerminate) callbacks.rwTerminate();
 
+	SDL_GL_DeleteContext(glcontext);
+	SDL_DestroyWindow(window);
+	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+
 	return 0;
 }
 
@@ -315,7 +383,7 @@ namespace host {
 void
 setMousePosition(int x, int y)
 {
-	SDL_WarpMouseInWindow(*engineOpenParams.window, x, y);
+	SDL_WarpMouseInWindow(window, x, y);
 }
 
 }

@@ -34,11 +34,10 @@ target("librw")
         add_deps("glad")
     end
 
-    -- gl/rwgl3.h also includes <SDL.h>/<GLFW/glfw3.h>, so this must propagate.
-    local gfxpkg = librw_gfxlib_package()
-    if gfxpkg then
-        add_packages(gfxpkg, {public = true})
-    end
+    -- No windowing package here, deliberately. librw does not create windows
+    -- or GL contexts and its headers no longer include <SDL.h>/<GLFW/glfw3.h>,
+    -- so SDL/GLFW is the host layer's dependency alone. That is also what
+    -- stops SDL2main's /SUBSYSTEM:WINDOWS leaking into the console tools.
 
     on_load(function (target)
         if backend_error then

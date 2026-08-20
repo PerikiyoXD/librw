@@ -2,38 +2,14 @@
 #define RW_GL_RWGL3_H
 
 #ifdef RW_GL3
+/* glad only. No <SDL.h>, no <GLFW/glfw3.h>: librw does not create windows or
+ * contexts, so its public headers must not drag the host's windowing library
+ * into every consumer. */
 #include "glad/glad.h"
-#ifdef LIBRW_SDL2
-#include <SDL.h>
-#elif defined(LIBRW_SDL3)
-#include <SDL3/SDL.h>
-#elif defined(LIBRW_GLFW)
-#include <GLFW/glfw3.h>
-#else
-not implemented
-#endif
 #endif
 
 namespace rw {
 
-#ifdef RW_GL3
-struct EngineOpenParams
-{
-#ifdef LIBRW_SDL2
-	SDL_Window **window;
-	bool32 fullscreen;
-#elif defined(LIBRW_SDL3)
-	SDL_Window **window;
-	bool32 fullscreen;
-#elif defined(LIBRW_GLFW)
-	GLFWwindow **window;
-#else
-    not implemented
-#endif
-	int width, height;
-	const char *windowtitle;
-};
-#endif
 
 namespace gl3 {
 
