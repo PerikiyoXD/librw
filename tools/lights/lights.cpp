@@ -171,7 +171,7 @@ void
 DrawPointLight(void)
 {
 	enum { NUMVERTS = 50 };
-	rw::RWDEVICE::Im3DVertex shape[NUMVERTS];
+	rw::backend::Im3DVertex shape[NUMVERTS];
 	rw::int32 i;
 	rw::V3d point;
 
@@ -200,7 +200,7 @@ void
 DrawCone(float coneAngle, float coneSize, float coneRatio)
 {
 	enum { NUMVERTS = 10 };
-	rw::RWDEVICE::Im3DVertex shape[NUMVERTS+1];
+	rw::backend::Im3DVertex shape[NUMVERTS+1];
 	rw::int16 indices[NUMVERTS*3];
 	rw::int32 i;
 
@@ -288,7 +288,7 @@ DrawDirectLight(void)
 	const float CONE_ANGLE = 45.0f;
 	const float CONE_SIZE = 3.0f;
 	const float LENGTH = 5.0f;
-	rw::RWDEVICE::Im3DVertex shape[NUMVERTS*2+1];
+	rw::backend::Im3DVertex shape[NUMVERTS*2+1];
 	rw::int16 indices[NUMVERTS*3];
 	rw::int32 i;
 

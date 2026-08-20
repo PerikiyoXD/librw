@@ -3,10 +3,10 @@
 #include <skeleton.h>
 #include <assert.h>
 
-#include "imgui/imgui.h"
+#include "imgui.h"
 #include "imgui_impl_rw.h"
 
-using namespace rw::RWDEVICE;
+using namespace rw::backend;
 
 static rw::Texture *g_FontTexture;
 static Im2DVertex *g_vertbuf;

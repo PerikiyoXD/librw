@@ -5,16 +5,16 @@
 #include <string.h>
 #include <assert.h>
 
-#include "../rwbase.h"
-#include "../rwerror.h"
-#include "../rwplg.h"
-#include "../rwpipeline.h"
-#include "../rwobjects.h"
-#include "../rwengine.h"
-#include "../rwanim.h"
-#include "../rwplugins.h"
-#include "rwps2.h"
-#include "rwps2plg.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwengine.h"
+#include "rw/rwanim.h"
+#include "rw/rwplugins.h"
+#include "rw/ps2/rwps2.h"
+#include "rw/ps2/rwps2plg.h"
 
 #include "rwps2impl.h"
 

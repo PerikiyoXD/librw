@@ -3,19 +3,19 @@
 #include <string.h>
 #include <assert.h>
 
-#include "../rwbase.h"
-#include "../rwerror.h"
-#include "../rwplg.h"
-#include "../rwrender.h"
-#include "../rwengine.h"
-#include "../rwpipeline.h"
-#include "../rwobjects.h"
-#include "../rwanim.h"
-#include "../rwplugins.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwrender.h"
+#include "rw/rwengine.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwanim.h"
+#include "rw/rwplugins.h"
 
-#include "rwgl3.h"
-#include "rwgl3shader.h"
-#include "rwgl3plg.h"
+#include "rw/gl/rwgl3.h"
+#include "rw/gl/rwgl3shader.h"
+#include "rw/gl/rwgl3plg.h"
 
 #include "rwgl3impl.h"
 

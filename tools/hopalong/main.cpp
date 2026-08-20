@@ -12,7 +12,7 @@ rw::EngineOpenParams engineOpenParams;
 rw::Texture *ParticleTex;
 rw::Raster *ParticleRaster;
 
-static rw::RWDEVICE::Im2DVertex im2dVerts[1024];
+static rw::backend::Im2DVertex im2dVerts[1024];
 static int numImVerts;
 static rw::uint16 imIndices[1024*2];
 static int numImIndices;
@@ -36,7 +36,7 @@ void
 RenderParticle(float x, float y, float sz, rw::RGBA col)
 {
 	using namespace rw;
-	using namespace RWDEVICE;
+	using namespace backend;
 
 	if(numImVerts+4 > nelem(im2dVerts) ||
 	   numImIndices+6 > nelem(imIndices)){
@@ -46,7 +46,7 @@ RenderParticle(float x, float y, float sz, rw::RGBA col)
 	}
 
 	float recipZ = 1.0f/Scene.camera->nearPlane;
-	rw::RWDEVICE::Im2DVertex *verts = &im2dVerts[numImVerts];
+	rw::backend::Im2DVertex *verts = &im2dVerts[numImVerts];
 
 	x += sk::globals.width/2;
 	y += sk::globals.height/2;

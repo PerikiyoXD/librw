@@ -273,7 +273,7 @@ DrawCameraFrustum(CameraData *c)
 {
 	rw::RGBA yellow = { 255, 255, 0, 64 };
 	rw::RGBA red = { 255, 0, 0, 255 };
-	rw::RWDEVICE::Im3DVertex frustum[13];
+	rw::backend::Im3DVertex frustum[13];
 	// lines
 	rw::uint16 indicesL[] = {
 		1,  2,  2,  3,  3,  4,  4,  1,
@@ -355,7 +355,7 @@ void
 DrawCameraViewplaneTexture(CameraData *c)
 {
 	rw::RGBA white = { 255, 255, 255, 255 };
-	rw::RWDEVICE::Im3DVertex frustum[4];
+	rw::backend::Im3DVertex frustum[4];
 	rw::uint16 indicesV[] = {
 		2, 1, 0,
 		0, 3, 2,

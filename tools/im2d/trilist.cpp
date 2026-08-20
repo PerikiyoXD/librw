@@ -66,8 +66,8 @@ rw::uint16 IndexedTriListIndices[45] = {
 	10, 15, 16, 11, 16, 17, 12, 17, 18, 13, 18, 19, 14, 19, 20
 };
 
-rw::RWDEVICE::Im2DVertex TriList[18];
-rw::RWDEVICE::Im2DVertex IndexedTriList[21];
+rw::backend::Im2DVertex TriList[18];
+rw::backend::Im2DVertex IndexedTriList[21];
 
 
 void

@@ -1,0 +1,25 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwrender.h"
+#include "rw/rwengine.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwanim.h"
+#include "rw/rwplugins.h"
+#include "rw/rwuserdata.h"
+#include "rw/rwcharset.h"
+#include "rw/ps2/rwps2.h"
+#include "rw/ps2/rwps2plg.h"
+#include "rw/d3d/rwxbox.h"
+#include "rw/d3d/rwd3d.h"
+#include "rw/d3d/rwd3d8.h"
+#include "rw/d3d/rwd3d9.h"
+#include "rw/gl/rwwdgl.h"
+#include "rw/gl/rwgl3.h"
+#include "rw/gl/rwgl3shader.h"
+#include "rw/gl/rwgl3plg.h"

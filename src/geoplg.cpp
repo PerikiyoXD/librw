@@ -3,21 +3,21 @@
 #include <string.h>
 #include <assert.h>
 
-#include "rwbase.h"
-#include "rwerror.h"
-#include "rwplg.h"
-#include "rwpipeline.h"
-#include "rwobjects.h"
-#include "rwengine.h"
-#include "rwanim.h"
-#include "rwplugins.h"
-#include "ps2/rwps2.h"
-#include "ps2/rwps2plg.h"
-#include "d3d/rwxbox.h"
-#include "d3d/rwd3d8.h"
-#include "d3d/rwd3d9.h"
-#include "gl/rwwdgl.h"
-#include "gl/rwgl3.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwengine.h"
+#include "rw/rwanim.h"
+#include "rw/rwplugins.h"
+#include "rw/ps2/rwps2.h"
+#include "rw/ps2/rwps2plg.h"
+#include "rw/d3d/rwxbox.h"
+#include "rw/d3d/rwd3d8.h"
+#include "rw/d3d/rwd3d9.h"
+#include "rw/gl/rwwdgl.h"
+#include "rw/gl/rwgl3.h"
 
 #define PLUGIN_ID 2
 

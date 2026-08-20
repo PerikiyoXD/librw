@@ -4,14 +4,14 @@
 #include <assert.h>
 
 #define WITH_D3D
-#include "../rwbase.h"
-#include "../rwplg.h"
-#include "../rwerror.h"
-#include "../rwrender.h"
-#include "../rwengine.h"
-#include "../rwpipeline.h"
-#include "../rwobjects.h"
-#include "rwd3d.h"
+#include "rw/rwbase.h"
+#include "rw/rwplg.h"
+#include "rw/rwerror.h"
+#include "rw/rwrender.h"
+#include "rw/rwengine.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/d3d/rwd3d.h"
 #include "rwd3dimpl.h"
 
 #define PLUGIN_ID 0

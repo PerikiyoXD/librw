@@ -1,17 +1,17 @@
 #include <stdio.h>
 
-#include "rwbase.h"
-#include "rwerror.h"
-#include "rwplg.h"
-#include "rwrender.h"
-#include "rwpipeline.h"
-#include "rwobjects.h"
-#include "rwengine.h"
-#include "rwcharset.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwrender.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwengine.h"
+#include "rw/rwcharset.h"
 
-#include "ps2/rwps2.h"
-#include "d3d/rwd3d.h"
-#include "gl/rwgl3.h"
+#include "rw/ps2/rwps2.h"
+#include "rw/d3d/rwd3d.h"
+#include "rw/gl/rwgl3.h"
 
 
 #define PLUGIN_ID 1000	// TODO: find a better ID
@@ -32,7 +32,7 @@ const uint8 fontbits[256*256] = {
 
 #define NUMCHARS 100
 static uint16 *indices;
-static RWDEVICE::Im2DVertex *vertices;
+static backend::Im2DVertex *vertices;
 static int32 numChars;
 static Raster *lastRaster;
 
@@ -44,7 +44,7 @@ Charset::open(void)
 	numChars = 0;
 	lastRaster = nil;
 	indices = rwNewT(uint16, NUMCHARS*6, MEMDUR_EVENT);
-	vertices = rwNewT(RWDEVICE::Im2DVertex, NUMCHARS*4, MEMDUR_EVENT);
+	vertices = rwNewT(backend::Im2DVertex, NUMCHARS*4, MEMDUR_EVENT);
 	if(indices == nil || vertices == nil){
 		close();
 		return 0;
@@ -150,7 +150,7 @@ Charset::printChar(int32 c, int32 x, int32 y)
 	Camera *cam;
 	float recipZ;
 	float u, v, du, dv;
-	RWDEVICE::Im2DVertex *vert;
+	backend::Im2DVertex *vert;
 	uint16 *ix;
 
 	if(c >= this->desc.count)

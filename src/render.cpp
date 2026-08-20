@@ -1,9 +1,9 @@
 #include <stdio.h>
 
-#include "rwbase.h"
-#include "rwplg.h"
-#include "rwengine.h"
-#include "rwrender.h"
+#include "rw/rwbase.h"
+#include "rw/rwplg.h"
+#include "rw/rwengine.h"
+#include "rw/rwrender.h"
 
 namespace rw {
 

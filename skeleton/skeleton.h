@@ -118,5 +118,5 @@ EventStatus EventHandler(Event e, void *param);
 
 sk::EventStatus AppEventHandler(sk::Event e, void *param);
 
-#include "imgui/imgui.h"
-#include "imgui/imgui_impl_rw.h"
+#include "imgui.h"
+#include "imgui_impl_rw.h"

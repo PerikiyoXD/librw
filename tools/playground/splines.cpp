@@ -4,7 +4,7 @@
 #include <vector>
 
 using namespace rw;
-using namespace RWDEVICE;
+using namespace backend;
 
 static Im3DVertex im3dVerts[1024];
 static int numImVerts;

@@ -4,19 +4,19 @@
 #include <assert.h>
 
 #define WITH_D3D
-#include "rwbase.h"
-#include "rwerror.h"
-#include "rwplg.h"
-#include "rwpipeline.h"
-#include "rwobjects.h"
-#include "rwengine.h"
-#include "ps2/rwps2.h"
-#include "d3d/rwd3d.h"
-#include "d3d/rwxbox.h"
-#include "d3d/rwd3d8.h"
-#include "d3d/rwd3d9.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwengine.h"
+#include "rw/ps2/rwps2.h"
+#include "rw/d3d/rwd3d.h"
+#include "rw/d3d/rwxbox.h"
+#include "rw/d3d/rwd3d8.h"
+#include "rw/d3d/rwd3d9.h"
 #include "d3d/rwd3dimpl.h"
-#include "gl/rwgl3.h"
+#include "rw/gl/rwgl3.h"
 
 #define PLUGIN_ID 0
 

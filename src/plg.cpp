@@ -5,12 +5,12 @@
 #include <math.h>
 #include <ctype.h>
 
-#include "rwbase.h"
-#include "rwerror.h"
-#include "rwplg.h"
-#include "rwpipeline.h"
-#include "rwobjects.h"
-#include "rwengine.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwengine.h"
 
 namespace rw {
 

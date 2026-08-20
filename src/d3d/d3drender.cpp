@@ -4,12 +4,12 @@
 #include <assert.h>
 
 #define WITH_D3D
-#include "../rwbase.h"
-#include "../rwplg.h"
-#include "../rwpipeline.h"
-#include "../rwobjects.h"
-#include "../rwengine.h"
-#include "rwd3d.h"
+#include "rw/rwbase.h"
+#include "rw/rwplg.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwengine.h"
+#include "rw/d3d/rwd3d.h"
 
 namespace rw {
 namespace d3d {

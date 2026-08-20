@@ -46,8 +46,8 @@ rw::uint16 IndexedTriFanIndices[17] = {
 	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0
 };
 
-rw::RWDEVICE::Im2DVertex TriFan[17];
-rw::RWDEVICE::Im2DVertex IndexedTriFan[16];
+rw::backend::Im2DVertex TriFan[17];
+rw::backend::Im2DVertex IndexedTriFan[16];
 
 
 void

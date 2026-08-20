@@ -80,8 +80,8 @@ rw::uint16 IndexedLineListIndices[20] = {
 	0, 4, 5, 8, 6, 9, 7, 10, 11, 15
 };
 
-rw::RWDEVICE::Im2DVertex LineList[32];
-rw::RWDEVICE::Im2DVertex IndexedLineList[16];
+rw::backend::Im2DVertex LineList[32];
+rw::backend::Im2DVertex IndexedLineList[16];
 
 
 void

@@ -419,3 +419,18 @@ void destroyDefaultShaders(void);
 
 }
 }
+
+/* The device namespace for this build.
+ *
+ * Declared here, beside the namespace it names, rather than derived
+ * independently in a config header. d3d is opened unconditionally above while
+ * its contents are guarded on RW_D3D9, so an alias computed elsewhere could
+ * name a
+ * namespace that had been preprocessed empty -- which is exactly how the old
+ * RWDEVICE macro drifted. Keeping the two together makes that impossible. */
+#ifdef RW_D3D9
+namespace rw { namespace backend = d3d; }
+#endif
+/* Deliberately not defined for RW_D3D8: Im2DVertex/Im3DVertex above are inside
+ * the RW_D3D9 guard, so rw::d3d is empty under d3d8 and an alias to it would be
+ * the very drift this is meant to prevent. d3d8 needs those types first. */

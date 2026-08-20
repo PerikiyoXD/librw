@@ -321,7 +321,7 @@ InitRW(void)
 void
 im2dtest(void)
 {
-	using namespace rw::RWDEVICE;
+	using namespace rw::backend;
 	int i;
 	static struct
 	{
@@ -372,7 +372,7 @@ im2dtest(void)
 void
 im2dtest2(void)
 {
-	using namespace rw::RWDEVICE;
+	using namespace rw::backend;
 	int i;
 	rw::Camera *cam = Scene.camera;
 	float n = cam->nearPlane;
@@ -419,7 +419,7 @@ im2dtest2(void)
 void
 im3dtest(void)
 {
-	using namespace rw::RWDEVICE;
+	using namespace rw::backend;
 	int i;
 	static struct
 	{

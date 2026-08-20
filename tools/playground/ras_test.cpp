@@ -783,12 +783,12 @@ Canvas *canvas;
 using namespace rw;
 
 void
-rastest_renderTriangles(RWDEVICE::Im2DVertex *scrverts, int32 numVerts, uint16 *indices, int32 numTris)
+rastest_renderTriangles(backend::Im2DVertex *scrverts, int32 numVerts, uint16 *indices, int32 numTris)
 {
 	int i;
 	RGBA col;
 	rs::Vertex v[3];
-	RWDEVICE::Im2DVertex *iv;
+	backend::Im2DVertex *iv;
 
 	rs::srDepthTestEnable = 1;
 	rs::srAlphaTestEnable = 0;

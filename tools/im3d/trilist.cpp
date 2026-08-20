@@ -75,8 +75,8 @@ rw::uint16 IndexedTriListIndices[36] = {
 	2, 6, 3,  6, 7, 3
 };
 
-rw::RWDEVICE::Im3DVertex TriList[36];
-rw::RWDEVICE::Im3DVertex IndexedTriList[8];
+rw::backend::Im3DVertex TriList[36];
+rw::backend::Im3DVertex IndexedTriList[8];
 
 
 void

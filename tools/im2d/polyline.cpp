@@ -59,8 +59,8 @@ rw::uint16 IndexedPolyLineIndices[46] = {
 	 3, 1, 4, 2, 1, 0
 };
 
-rw::RWDEVICE::Im2DVertex PolyLine[16];
-rw::RWDEVICE::Im2DVertex IndexedPolyLine[21];
+rw::backend::Im2DVertex PolyLine[16];
+rw::backend::Im2DVertex IndexedPolyLine[21];
 
 
 void

@@ -2,16 +2,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../rwbase.h"
-#include "../rwerror.h"
-#include "../rwplg.h"
-#include "../rwrender.h"
-#include "../rwengine.h"
-#include "../rwpipeline.h"
-#include "../rwobjects.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwrender.h"
+#include "rw/rwengine.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
 #ifdef RW_OPENGL
-#include "rwgl3.h"
-#include "rwgl3shader.h"
+#include "rw/gl/rwgl3.h"
+#include "rw/gl/rwgl3shader.h"
 
 #include "rwgl3impl.h"
 

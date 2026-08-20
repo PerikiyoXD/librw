@@ -57,8 +57,8 @@ rw::uint16 IndexedTriStripIndices[18] = {
 	4, 12, 5, 13, 6, 14, 7, 15, 0, 8
 };
 
-rw::RWDEVICE::Im2DVertex TriStrip[18];
-rw::RWDEVICE::Im2DVertex IndexedTriStrip[16];
+rw::backend::Im2DVertex TriStrip[18];
+rw::backend::Im2DVertex IndexedTriStrip[16];
 
 
 void

@@ -4,17 +4,17 @@
 #include <assert.h>
 
 #define WITH_D3D
-#include "../rwbase.h"
-#include "../rwerror.h"
-#include "../rwplg.h"
-#include "../rwrender.h"
-#include "../rwpipeline.h"
-#include "../rwobjects.h"
-#include "../rwanim.h"
-#include "../rwengine.h"
-#include "../rwplugins.h"
-#include "rwd3d.h"
-#include "rwd3d9.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
+#include "rw/rwplg.h"
+#include "rw/rwrender.h"
+#include "rw/rwpipeline.h"
+#include "rw/rwobjects.h"
+#include "rw/rwanim.h"
+#include "rw/rwengine.h"
+#include "rw/rwplugins.h"
+#include "rw/d3d/rwd3d.h"
+#include "rw/d3d/rwd3d9.h"
 
 namespace rw {
 namespace d3d9 {

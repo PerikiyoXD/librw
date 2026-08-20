@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "rwbase.h"
-#include "rwerror.h"
+#include "rw/rwbase.h"
+#include "rw/rwerror.h"
 
 namespace rw {
 
@@ -27,7 +27,7 @@ getError(Error *e)
 
 const char *errstrs[] = {
 	"No error",
-#include "base.err"
+#include "rw/base.err"
 };
 
 #undef ECODE

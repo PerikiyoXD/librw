@@ -82,8 +82,8 @@ rw::uint16 IndexedLineListIndices[96] = {
 	17,13, 17,14, 17,15, 17,16, 13,14,  14,15, 15,16, 16,13
 };
 
-rw::RWDEVICE::Im3DVertex LineList[28];
-rw::RWDEVICE::Im3DVertex IndexedLineList[18];
+rw::backend::Im3DVertex LineList[28];
+rw::backend::Im3DVertex IndexedLineList[18];
 
 
 void
