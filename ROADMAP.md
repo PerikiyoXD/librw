@@ -149,6 +149,24 @@ the empty `rw::d3d` would be the drift this change exists to remove.
 They are native formats, not render devices, and are always compiled. Nothing
 needs to select them. See "Devices and native formats" above.
 
+### `sk::CHARINPUT` now passes a pointer
+
+It used to smuggle the character *through* the `void *param` slot as a value
+(`(void*)(uintptr)c`) while every other event passed a real pointer -- in the
+same switch, `KEYDOWN` dereferenced `param` and `CHARINPUT` did not. Handlers
+must now read it as `*(int*)param`, like `KEYDOWN`/`KEYUP`.
+
+### `sk::Key` and `sk::MouseState` moved to `host::`
+
+Key codes and mouse state are windowing concerns and live in the host layer.
+`skeleton.h` pulls them back into `sk::` with a using-directive, so existing
+code writing `sk::KEY_ESC` or `sk::MouseState` still compiles.
+
+### Applications no longer define `engineOpenParams`
+
+It used to be defined in every application's `main.cpp` and filled by the
+window layer. The host owns it now; delete your definition.
+
 ### `RW_GLES2` / `RW_GLES3` are rejected
 
 They were never backends. Build `RW_GL3`; GLES is selected at runtime.

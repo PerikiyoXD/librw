@@ -234,7 +234,7 @@ bool hostShouldQuit(void)   { return sk::globals.quit != 0; }
 
 void hostKeyDown(int key)   { sk::EventHandler(sk::KEYDOWN, &key); }
 void hostKeyUp(int key)     { sk::EventHandler(sk::KEYUP, &key); }
-void hostCharInput(int c)   { sk::EventHandler(sk::CHARINPUT, (void*)(rw::uintptr)c); }
+void hostCharInput(int c)   { sk::EventHandler(sk::CHARINPUT, &c); }
 
 void hostMouseMove(const host::MouseState *m)
 	{ sk::EventHandler(sk::MOUSEMOVE, (void*)m); }

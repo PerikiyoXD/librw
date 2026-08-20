@@ -322,7 +322,7 @@ ImGuiEventHandler(sk::Event e, void *param)
 		io.AddKeyEvent(SkKeyToImGuiKey(*(int*)param), false);
 		return EVENTPROCESSED;
 	case CHARINPUT:
-		c = (uint)(uintptr)param;
+		c = (uint)*(int*)param;
 		io.AddInputCharacter((unsigned short)c);
 		return EVENTPROCESSED;
 	case MOUSEMOVE:
