@@ -4,26 +4,30 @@
 -- scope globals: import() does not exist there, so every included xmake.lua
 -- reaches this through plain globals rather than a module.
 
--- define     RW_* macro src/librwconf.h keys off
+-- Render devices -- the things that implement rw::Device. Exactly one is
+-- selected per build.
+--
+-- Native formats (d3d8, xbox, wdgl, and the format halves of d3d9/gl3/ps2)
+-- implement rw::Driver instead and are ALWAYS compiled, so any DFF/TXD loads
+-- regardless of the active device. They are deliberately absent from this
+-- table: they are not a build-time choice.
+--
+-- There is no gles2/gles3 device either; GLES is a runtime property of gl3.
+--
+-- define     RW_* macro include/rw/librwconf.h keys off
 -- gl         needs a GL loader (glad)
 -- gfxlib     needs a windowing/context library
 -- desktopgl  links a desktop GL implementation
---
--- There is no gles2/gles3 backend: GLES is a runtime property of gl3, chosen
--- from gl3Caps.gles. wdgl and d3d8 are selectable but incomplete; librwconf.h
--- rejects them with an explanation unless RW_ALLOW_INCOMPLETE_BACKEND is set.
 LIBRW_BACKENDS = {
     null  = {define = "RW_NULL"},
     gl3   = {define = "RW_GL3",   gl = true, gfxlib = true, desktopgl = true},
-    wdgl  = {define = "RW_WDGL",  gl = true, desktopgl = true},
-    d3d8  = {define = "RW_D3D8",  syslinks = {"user32", "gdi32", "d3d8"}},
     d3d9  = {define = "RW_D3D9",  syslinks = {"user32", "gdi32", "d3d9",
                                               "Xinput9_1_0"}},
     ps2   = {define = "RW_PS2"},
 }
 
 -- Fallback menu for platforms absent from LIBRW_PLATFORM_BACKENDS.
-LIBRW_BACKEND_ORDER = {"null", "gl3", "wdgl", "d3d8", "d3d9", "ps2"}
+LIBRW_BACKEND_ORDER = {"null", "gl3", "d3d9", "ps2"}
 
 LIBRW_GFXLIBS = {
     glfw = {define = "LIBRW_GLFW", package = "glfw"},
@@ -37,10 +41,10 @@ LIBRW_GFXLIB_ORDER = {"glfw", "sdl2", "sdl3"}
 -- from CMakeLists.txt, cross covers the PS2 toolchain. Platforms absent here
 -- fall back to LIBRW_BACKEND_ORDER rather than being guessed at.
 LIBRW_PLATFORM_BACKENDS = {
-    windows  = {"null", "gl3", "wdgl", "d3d8", "d3d9"},
-    mingw    = {"null", "gl3", "wdgl", "d3d8", "d3d9"},
-    linux    = {"null", "gl3", "wdgl"},
-    macosx   = {"null", "gl3", "wdgl"},
+    windows  = {"null", "gl3", "d3d9"},
+    mingw    = {"null", "gl3", "d3d9"},
+    linux    = {"null", "gl3"},
+    macosx   = {"null", "gl3"},
     cross    = {"null", "gl3", "ps2"},
 }
 

@@ -21,44 +21,83 @@ Affected files: `CMakeLists.txt`, `cmake/`, `README.cmake`, `src/CMakeLists.txt`
 
 Decide later whether to repair them or drop them.
 
-## Backends
+## Devices and native formats
 
-Configuration lives in `xmake/matrix.lua` (build side) and `src/librwconf.h`
-(source side).
+These are two different things, and conflating them is the source of most of
+the confusion in this tree.
 
-| Backend | State |
-| --- | --- |
-| `null`  | builds |
-| `gl3`   | builds, with `glfw` / `sdl2` / `sdl3` |
-| `d3d9`  | builds |
-| `wdgl`  | **incomplete** |
-| `d3d8`  | **incomplete** |
-| `ps2`   | untested here; needs a PS2 toolchain |
+**Render device** -- implements `rw::Device` (`include/rw/rwengine.h:48`):
+`beginUpdate`, `clearCamera`, `showRaster`, render state, `im2D*`/`im3D*`.
+There is exactly **one** per build, selected by an `RW_*` macro.
 
-`librwconf.h` rejects the incomplete backends with an explanation rather than
-letting them fail at ~45 unrelated use sites. Set `RW_ALLOW_INCOMPLETE_BACKEND`
-to build one anyway while working on it.
+| Device | `Device` definition | State |
+| --- | --- | --- |
+| `null`  | `src/engine.cpp:552`        | builds, runs |
+| `gl3`   | `src/gl/gl3device.cpp:2371` | builds, runs (glfw / sdl2 / sdl3) |
+| `d3d9`  | `src/d3d/d3ddevice.cpp:2000`| builds, runs |
+| `ps2`   | `src/ps2/ps2device.cpp:26`  | untested here; needs a PS2 toolchain |
 
-### wdgl
+**Native format** -- implements `rw::Driver` (`include/rw/rwengine.h:74`),
+registered into `engine->driver[PLATFORM_*]`: raster create/lock/unlock,
+image conversion, plus `readNativeData`/`writeNativeData` and instancing
+pipelines. There is an **array** of these, indexed by the runtime `PLATFORM_*`
+enum, and they are **always compiled** -- so any DFF/TXD loads regardless of
+which device is active.
 
-Defines no device namespace of its own. It also defines `RW_OPENGL`, which
-un-guards `rwgl3shader.h` while `rwgl3.h` stays guarded on `RW_GL3` — so the
-shader header references gl3 types that were preprocessed away. The guards need
-to agree on granularity before this can build.
+Formats present: d3d8, d3d9, xbox, wdgl, ps2, gl3. None has or needs a
+selector macro; `xbox` never had one and that is the correct precedent.
 
-### d3d8
+### d3d8 and wdgl are formats, not devices
 
-`rwd3d.h` guards `Im2DVertex` / `Im3DVertex` on `RW_D3D9`, so under d3d8 the
-`rw::d3d` namespace exists but is empty. Those types need to move out of the
-`RW_D3D9` guard, or d3d8 needs its own.
+They implement `Driver` only. Neither defines a `Device`, so selecting one
+leaves `rw::d3d::renderdevice` undefined at link time. `librwconf.h` rejects
+`RW_D3D8`/`RW_WDGL` with an explanation. Their format support is unaffected
+and always available.
 
-### There is no gles2/gles3 backend
+If a d3d8 or wdgl *renderer* is ever wanted, that is new work -- a ~2000-line
+`Device` implementation -- not a repair.
 
-GLES is a *runtime* property of the gl3 backend — see `gl3Caps.gles` in
-`src/gl/rwgl3.h` and the loader choice in `gl3device.cpp`. The last
-compile-time GLES code was disabled by renaming its guards to `xxxRW_GLES2`
-(`src/gl/gl3shader.cpp`). `RW_GLES2` / `RW_GLES3` are rejected by
-`librwconf.h`; build `gl3` instead.
+### There is no gles2/gles3 device
+
+GLES is a runtime property of gl3 -- see `gl3Caps.gles` in
+`include/rw/gl/rwgl3.h` and the loader choice in `gl3device.cpp`. The last
+compile-time GLES work was parked by renaming its guards to `xxxRW_GLES2`
+(`src/gl/gl3shader.cpp:279,292`).
+
+## Known issues
+
+- `rwgl3.h` is a public header but exposes `SDL_Window**` and includes
+  `<SDL.h>`/`<GLFW/glfw3.h>`. librw currently creates the window and GL
+  context itself (`gl3device.cpp`, ~600 lines including three near-identical
+  SDL2/SDL3/GLFW implementations). Decision taken: **librw should receive a
+  context** instead. That removes the triplication and the layering violation
+  together.
+- `d3ddevice.cpp` and `gl3device.cpp` contain genuinely duplicated code, not
+  merely parallel code: `getRenderState`, `setDepthTest`/`setDepthWrite`/
+  `setVertexAlpha`, the `RwStateCache` structs and the state map tables. The
+  `beginUpdate` view matrix is identical in both down to a typo in a comment.
+- Instancing (a format concern, always needed) and `renderCB` (a device
+  concern) are mixed in the same pipeline files, e.g. `src/d3d/d3d8skin.cpp`.
+- `BIGENDIAN` is tested in `rwbase.h:410` and `base.cpp:758,778` but defined
+  nowhere. From `e4b4bf9 "made (most of) streaming work on big endian"` --
+  dormant, unfinished, not dead.
+- `RWPUBLIC` gates `registerModule` out of public headers in four classes but
+  is never defined. It is an unused public/private API mechanism that overlaps
+  with the `include/` split.
+- The installed tree is unusable for skeleton: `skeleton.h` includes
+  `"imgui.h"` but no imgui headers are installed.
+- No test suite exists. Verification is "the four devices build" plus manual
+  runs of the windowed tools.
+
+## Source layout
+
+`include/` is the public API and the only exported include path. `src/` is
+deliberately not on the include path, so internal headers (`rw*impl.h`,
+`shaders/`) are reachable only relative to the including file.
+
+Still to do: `src/` root mixes backend-independent core with files carrying
+device conditionals -- `base.cpp` (`RW_D3D9`/`RW_GL3`/`RW_PS2`),
+`engine.cpp`, `texture.cpp`, `raster.cpp`, `charset.cpp`.
 
 ## Breaking changes for downstream
 
@@ -99,11 +138,16 @@ Note that `rw::backend` does **not** exist for `d3d8`, deliberately —
 `Im2DVertex`/`Im3DVertex` are inside `rwd3d.h`'s `RW_D3D9` guard, so aliasing
 the empty `rw::d3d` would be the drift this change exists to remove.
 
-### Exactly one backend macro is now required
+### Exactly one device macro is now required
 
 `librwconf.h` errors if zero or more than one of `RW_NULL`, `RW_GL3`,
-`RW_WDGL`, `RW_D3D8`, `RW_D3D9`, `RW_PS2` is defined. Previously a build with
-none simply got no `RWDEVICE` and failed later with unrelated errors.
+`RW_D3D9`, `RW_PS2` is defined. Previously a build with none simply got no
+`RWDEVICE` and failed later with unrelated errors.
+
+### `RW_D3D8` and `RW_WDGL` are rejected
+
+They are native formats, not render devices, and are always compiled. Nothing
+needs to select them. See "Devices and native formats" above.
 
 ### `RW_GLES2` / `RW_GLES3` are rejected
 
