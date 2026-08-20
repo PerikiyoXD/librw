@@ -66,12 +66,15 @@ compile-time GLES work was parked by renaming its guards to `xxxRW_GLES2`
 
 ## Known issues
 
-- Display topology is stubbed. `deviceSystemGL3` answers the monitor and
-  video-mode `DeviceReq` cases with a single mode derived from the current
-  framebuffer size, because only the host can enumerate displays and the host
-  does not expose them yet. Fullscreen and mode switching are therefore
-  unavailable on gl3. d3d9 still enumerates through `IDirect3D9`, so the two
-  devices disagree; the fix is a display-topology interface on the host.
+- Selecting a video mode does not apply it. `host::DisplayTopology::setVideoMode`
+  records the choice but does not act on it, because switching resolution or
+  going fullscreen means recreating the window and the GL context, which
+  invalidates every raster librw has uploaded. Enumeration is real; applying
+  is not implemented on any GL host.
+- `setMultiSamplingLevels` can only succeed as a no-op on GL. MSAA is a
+  context-creation attribute, and by the time librw can ask, the context
+  exists. The host reads it from `host::config` before creating the window,
+  so it must be chosen before `Engine::open`.
 - `d3ddevice.cpp` and `gl3device.cpp` contain genuinely duplicated code, not
   merely parallel code: `getRenderState`, `setDepthTest`/`setDepthWrite`/
   `setVertexAlpha`, the `RwStateCache` structs and the state map tables. The
