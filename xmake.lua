@@ -17,6 +17,10 @@ add_rules("mode.debug", "mode.release")
 set_languages("c11", "cxx14")
 set_allowedmodes("debug", "release")
 
+-- Emit PDBs in every mode, release included. mode.release would otherwise
+-- hide symbols, which leaves an access violation with nothing but an address.
+set_symbols("debug")
+
 includes("xmake/matrix.lua")
 
 option("backend")
