@@ -10,3 +10,4 @@ librw.VC.VC.opendb
 imgui.ini
 
 /.xmake
+/.vscode
