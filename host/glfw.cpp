@@ -1,6 +1,8 @@
 #ifdef LIBRW_GLFW
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <GLFW/glfw3.h>
 #include <rw.h>
 #include "host.h"
@@ -235,6 +237,155 @@ static void  intervalThunk(void *w, int i) { glfwSwapInterval(i); }
 static void  sizeThunk(void *w, int *ww, int *hh)
 	{ glfwGetFramebufferSize((GLFWwindow*)w, ww, hh); }
 
+/* ---- display topology ---------------------------------------------------
+ *
+ * librw cannot enumerate monitors through OpenGL, so it forwards its
+ * Engine::get*VideoMode / get*SubSystem calls here. This is the code that
+ * used to live in gl3device.cpp, once per windowing library. */
+
+static GLFWmonitor *monitor;
+static int   currentMonitor;
+static int   numMonitors;
+static int   currentMode;
+
+/* Modes for the selected monitor, deduplicated by resolution keeping the
+ * highest refresh rate, with entry 0 the monitor's current mode (windowed). */
+static rw::VideoMode *modes;
+static int numModes;
+
+static int
+modeDepth(const GLFWvidmode *m)
+{
+	int bits = m->redBits + m->greenBits + m->blueBits;
+	int depth;
+	for(depth = 1; depth < bits; depth <<= 1)
+		;
+	return depth;
+}
+
+static void
+buildModeList(void)
+{
+	int i, n;
+	const GLFWvidmode *vm = glfwGetVideoModes(monitor, &n);
+
+	/* Plain malloc, not rwNewT: the host runs before rw::Engine::init(), so
+	 * Engine::memfuncs is still null here and rwFree/rwNewT would call
+	 * through a null pointer. The host is not a librw allocation client
+	 * anyway -- its own bookkeeping has no business in librw's heap. */
+	free(modes);
+	modes = (rw::VideoMode*)malloc((n+1) * sizeof(rw::VideoMode));
+	if(modes == nil){
+		numModes = 0;
+		return;
+	}
+
+	/* entry 0: current mode, windowed */
+	const GLFWvidmode *cur = glfwGetVideoMode(monitor);
+	modes[0].width  = cur->width;
+	modes[0].height = cur->height;
+	modes[0].depth  = modeDepth(cur);
+	modes[0].flags  = 0;
+	numModes = 1;
+
+	for(i = 0; i < n; i++){
+		int j;
+		for(j = 1; j < numModes; j++)
+			if(modes[j].width == vm[i].width &&
+			   modes[j].height == vm[i].height &&
+			   modes[j].depth == modeDepth(&vm[i]))
+				break;
+		if(j < numModes)
+			continue;	/* already have this resolution */
+		modes[numModes].width  = vm[i].width;
+		modes[numModes].height = vm[i].height;
+		modes[numModes].depth  = modeDepth(&vm[i]);
+		modes[numModes].flags  = rw::VIDEOMODEEXCLUSIVE;
+		numModes++;
+	}
+}
+
+static int32  topoNumDisplays(void)      { return numMonitors; }
+static int32  topoCurrentDisplay(void)   { return currentMonitor; }
+static int32  topoNumVideoModes(void)    { return numModes; }
+static int32  topoCurrentVideoMode(void) { return currentMode; }
+
+static rw::bool32
+topoSetDisplay(int32 n)
+{
+	GLFWmonitor **mons = glfwGetMonitors(&numMonitors);
+	if(n < 0 || n >= numMonitors)
+		return 0;
+	currentMonitor = n;
+	monitor = mons[n];
+	buildModeList();
+	currentMode = 0;
+	return 1;
+}
+
+static rw::bool32
+topoDisplayName(int32 n, char *buf, int32 buflen)
+{
+	GLFWmonitor **mons = glfwGetMonitors(&numMonitors);
+	if(n < 0 || n >= numMonitors)
+		return 0;
+	strncpy(buf, glfwGetMonitorName(mons[n]), buflen-1);
+	buf[buflen-1] = '\0';
+	return 1;
+}
+
+static rw::bool32
+topoSetVideoMode(int32 n)
+{
+	if(n < 0 || n >= numModes)
+		return 0;
+	currentMode = n;
+	/* Applying it means recreating the window; not done yet, so this only
+	 * records the selection. */
+	return 1;
+}
+
+static rw::bool32
+topoVideoModeInfo(int32 n, rw::VideoMode *out)
+{
+	if(n < 0 || n >= numModes)
+		return 0;
+	*out = modes[n];
+	return 1;
+}
+
+static int32
+topoMaxMultiSamplingLevels(void)
+{
+	GLint maxSamples = 0;
+	glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+	return maxSamples == 0 ? 1 : maxSamples;
+}
+
+static int32     topoMultiSamplingLevels(void) { return host::config.numSamples; }
+static rw::bool32 topoSetMultiSamplingLevels(int32 n)
+{
+	/* The context already exists by the time librw can ask, and MSAA is a
+	 * window-creation hint, so only a no-op change can succeed. */
+	return n == host::config.numSamples;
+}
+
+static const rw::DisplayTopology topology = {
+	topoNumDisplays,
+	topoCurrentDisplay,
+	topoSetDisplay,
+	topoDisplayName,
+
+	topoNumVideoModes,
+	topoCurrentVideoMode,
+	topoSetVideoMode,
+	topoVideoModeInfo,
+
+	topoMaxMultiSamplingLevels,
+	topoMultiSamplingLevels,
+	topoSetMultiSamplingLevels,
+};
+
 static bool
 createSurface(void)
 {
@@ -251,6 +402,11 @@ createSurface(void)
 		return false;
 	}
 	glfwSetErrorCallback(glfwerr);
+
+	if(!topoSetDisplay(0)){
+		fprintf(stderr, "no monitor found\n");
+		return false;
+	}
 
 	/* GLX rounds 1 sample up to 2x or 4x, so only hint when we mean it. */
 	if(host::config.numSamples > 1)
@@ -280,6 +436,7 @@ createSurface(void)
 	engineOpenParams.swapBuffers = swapThunk;
 	engineOpenParams.setSwapInterval   = intervalThunk;
 	engineOpenParams.getFramebufferSize = sizeThunk;
+	engineOpenParams.topology    = &topology;
 	engineOpenParams.width       = host::config.width;
 	engineOpenParams.height      = host::config.height;
 	engineOpenParams.windowtitle = host::config.title;
@@ -321,6 +478,8 @@ main(int argc, char *argv[])
 
 	glfwDestroyWindow(window);
 	glfwTerminate();
+	free(modes);
+	modes = nil;
 
 	return 0;
 }

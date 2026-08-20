@@ -126,6 +126,19 @@ struct EngineOpenParams
 	void  (*setSwapInterval)(void *window, int interval);
 	void  (*getFramebufferSize)(void *window, int *w, int *h);
 
+	/* Who can enumerate monitors and video modes depends on the device, and
+	 * the split is not arbitrary:
+	 *
+	 *   d3d9  Direct3D *is* a display API. IDirect3D9 enumerates adapters
+	 *         and modes, so librw answers these itself and ignores this
+	 *         field.
+	 *   gl3   OpenGL has no notion of a monitor. Only the host can answer,
+	 *         so it supplies this table and librw forwards to it.
+	 *
+	 * May be null, in which case the device reports a single video mode
+	 * matching the current framebuffer. */
+	const struct DisplayTopology *topology;
+
 	/* --- all devices -------------------------------------------------- */
 
 	int32 width, height;
@@ -183,6 +196,26 @@ struct VideoMode
 	int32 height;
 	int32 depth;
 	uint32 flags;
+};
+
+/* Supplied by the host for devices that cannot enumerate displays
+ * themselves; see EngineOpenParams::topology. Mirrors the Engine::* topology
+ * calls, which forward here rather than answering directly. */
+struct DisplayTopology
+{
+	int32  (*numDisplays)(void);
+	int32  (*currentDisplay)(void);
+	bool32 (*setDisplay)(int32 n);
+	bool32 (*displayName)(int32 n, char *buf, int32 buflen);
+
+	int32  (*numVideoModes)(void);
+	int32  (*currentVideoMode)(void);
+	bool32 (*setVideoMode)(int32 n);
+	bool32 (*videoModeInfo)(int32 n, VideoMode *out);
+
+	int32  (*maxMultiSamplingLevels)(void);
+	int32  (*multiSamplingLevels)(void);
+	bool32 (*setMultiSamplingLevels)(int32 n);
 };
 
 struct Camera;

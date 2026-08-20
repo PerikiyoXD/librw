@@ -1640,14 +1640,31 @@ finalizeOpenGL(void)
 	return 1;
 }
 
-/* Display topology (monitors, video modes, multisampling) is the host's --
- * only the owner of the display connection can answer it, and OpenGL has no
- * concept of a monitor. Those requests are stubbed here rather than lying
- * about a single fake mode. See ROADMAP.md. */
+/* Display topology forwards to the host. OpenGL has no way to enumerate
+ * monitors or modes, so librw cannot answer these itself -- see the comment
+ * on EngineOpenParams::topology.
+ *
+ * When the host supplies no table we report a single mode matching the
+ * current framebuffer, which is honest for a fixed window and is what an
+ * embedder that never intends to go fullscreen wants. */
+
+static int
+describeCurrentMode(VideoMode *out)
+{
+	int w = 0, h = 0;
+	glGlobals.surface.getFramebufferSize(glGlobals.surface.window, &w, &h);
+	out->width = w;
+	out->height = h;
+	out->depth = 32;
+	out->flags = 0;
+	return 1;
+}
 
 static int
 deviceSystemGL3(DeviceReq req, void *arg, int32 n)
 {
+	const DisplayTopology *topo = glGlobals.surface.topology;
+
 	switch(req){
 	case DEVICEOPEN:
 		return openGL3((EngineOpenParams*)arg);
@@ -1663,41 +1680,43 @@ deviceSystemGL3(DeviceReq req, void *arg, int32 n)
 		return finalizeOpenGL();
 
 	case DEVICEGETNUMSUBSYSTEMS:
-	case DEVICEGETNUMVIDEOMODES:
-		return 1;
+		return topo ? topo->numDisplays() : 1;
 	case DEVICEGETCURRENTSUBSYSTEM:
-	case DEVICEGETCURRENTVIDEOMODE:
-		return 0;
+		return topo ? topo->currentDisplay() : 0;
 	case DEVICESETSUBSYSTEM:
-	case DEVICESETVIDEOMODE:
-		return n == 0;
-
+		return topo ? topo->setDisplay(n) : (n == 0);
 	case DEVICEGETSUBSSYSTEMINFO:
-		strncpy(((SubSystemInfo*)arg)->name, "host",
+		if(topo)
+			return topo->displayName(n, ((SubSystemInfo*)arg)->name,
+				sizeof(SubSystemInfo::name));
+		strncpy(((SubSystemInfo*)arg)->name, "default",
 			sizeof(SubSystemInfo::name));
 		return 1;
 
-	case DEVICEGETVIDEOMODEINFO: {
-		VideoMode *rwmode = (VideoMode*)arg;
-		int w = 0, h = 0;
-		glGlobals.surface.getFramebufferSize(glGlobals.surface.window, &w, &h);
-		rwmode->width = w;
-		rwmode->height = h;
-		rwmode->depth = 32;
-		rwmode->flags = 0;
-		return 1;
-	}
+	case DEVICEGETNUMVIDEOMODES:
+		return topo ? topo->numVideoModes() : 1;
+	case DEVICEGETCURRENTVIDEOMODE:
+		return topo ? topo->currentVideoMode() : 0;
+	case DEVICESETVIDEOMODE:
+		return topo ? topo->setVideoMode(n) : (n == 0);
+	case DEVICEGETVIDEOMODEINFO:
+		return topo ? topo->videoModeInfo(n, (VideoMode*)arg)
+		            : describeCurrentMode((VideoMode*)arg);
 
-	case DEVICEGETMAXMULTISAMPLINGLEVELS: {
-		GLint maxSamples;
-		glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-		return maxSamples == 0 ? 1 : maxSamples;
-	}
+	case DEVICEGETMAXMULTISAMPLINGLEVELS:
+		if(topo)
+			return topo->maxMultiSamplingLevels();
+		else{
+			GLint maxSamples;
+			glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+			return maxSamples == 0 ? 1 : maxSamples;
+		}
 	case DEVICEGETMULTISAMPLINGLEVELS:
-		return 1;
+		return topo ? topo->multiSamplingLevels() : 1;
 	case DEVICESETMULTISAMPLINGLEVELS:
-		/* Chosen by the host at context creation. */
-		return n <= 1;
+		/* Only meaningful before the context exists; the host decides
+		 * whether it can still honour a change. */
+		return topo ? topo->setMultiSamplingLevels(n) : (n <= 1);
 
 	default:
 		assert(0 && "not implemented");

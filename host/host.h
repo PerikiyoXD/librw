@@ -107,6 +107,31 @@ struct Config
  * for themselves. */
 extern rw::EngineOpenParams engineOpenParams;
 
+/* LIFECYCLE RULE, for host implementors:
+ *
+ *   Nothing in namespace rw may be USED before callbacks.rwInitialize()
+ *   returns. Including rw.h is fine; calling into librw is not.
+ *
+ * The host runs first -- it creates the window and the GL context before the
+ * app gets rwInitialize() and calls rw::Engine::init(). Until that returns,
+ * librw is uninitialised: rw::Engine::memfuncs holds null function pointers,
+ * so rwNewT/rwFree call through null, and the allocation tracker has not been
+ * set up either. This compiles perfectly and crashes intermittently, which is
+ * the worst combination -- it cost a debugger session to find once already.
+ *
+ * Use malloc/free for the host's own bookkeeping. The host is not a librw
+ * allocation client; that is the same boundary as not linking SDL into librw,
+ * applied to memory.
+ *
+ * Order:
+ *   callbacks.initialize()   no window, no librw
+ *   create window + context  no librw
+ *   callbacks.rwInitialize() librw becomes usable during this call
+ *   ... event loop ...       librw usable
+ *   callbacks.rwTerminate()  librw usable until this returns
+ *   destroy window           no librw
+ */
+
 /* Everything the host delivers to the app. The app defines this object; the
  * host only declares it, so there is no registration ordering problem and no
  * chance of the loop running before the app is reachable.

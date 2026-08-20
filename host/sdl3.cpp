@@ -1,6 +1,8 @@
 #ifdef LIBRW_SDL3
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <SDL3/SDL.h>
 #include <rw.h>
 #include "host.h"
@@ -221,6 +223,179 @@ static void  intervalThunk(void *w, int i) { SDL_GL_SetSwapInterval(i); }
 static void  sizeThunk(void *w, int *ww, int *hh)
 	{ SDL_GetWindowSize((SDL_Window*)w, ww, hh); }
 
+/* ---- display topology ---------------------------------------------------
+ *
+ * librw cannot enumerate monitors through OpenGL, so it forwards its
+ * Engine::get*VideoMode / get*SubSystem calls here.
+ *
+ * SDL3 differs from SDL2: displays are SDL_DisplayID handles rather than
+ * indices, and the mode list comes back as an SDL-allocated array that must
+ * be released with SDL_free.
+ *
+ * malloc, not rwNewT: this runs before rw::Engine::init(). See the lifecycle
+ * rule in host.h. */
+
+static SDL_DisplayID currentDisplayID;
+static int currentDisplay;
+static int numDisplays;
+static int currentMode;
+
+static rw::VideoMode *modes;
+static int numModes;
+
+static int
+modeDepth(const SDL_DisplayMode *m)
+{
+	int bits = SDL_BITSPERPIXEL(m->format);
+	int depth;
+	for(depth = 1; depth < bits; depth <<= 1)
+		;
+	return depth;
+}
+
+static void
+buildModeList(void)
+{
+	SDL_DisplayMode **list;
+	const SDL_DisplayMode *cur;
+	int i, n = 0;
+
+	list = SDL_GetFullscreenDisplayModes(currentDisplayID, &n);
+
+	free(modes);
+	modes = (rw::VideoMode*)malloc((n+1) * sizeof(rw::VideoMode));
+	if(modes == nil){
+		numModes = 0;
+		SDL_free(list);
+		return;
+	}
+
+	/* entry 0: current mode, windowed */
+	cur = SDL_GetCurrentDisplayMode(currentDisplayID);
+	if(cur){
+		modes[0].width  = cur->w;
+		modes[0].height = cur->h;
+		modes[0].depth  = modeDepth(cur);
+		modes[0].flags  = 0;
+		numModes = 1;
+	}else
+		numModes = 0;
+
+	for(i = 0; i < n; i++){
+		int j;
+		for(j = 1; j < numModes; j++)
+			if(modes[j].width == list[i]->w &&
+			   modes[j].height == list[i]->h &&
+			   modes[j].depth == modeDepth(list[i]))
+				break;
+		if(j < numModes)
+			continue;	/* already have this resolution */
+		modes[numModes].width  = list[i]->w;
+		modes[numModes].height = list[i]->h;
+		modes[numModes].depth  = modeDepth(list[i]);
+		modes[numModes].flags  = rw::VIDEOMODEEXCLUSIVE;
+		numModes++;
+	}
+
+	SDL_free(list);
+}
+
+static int32 topoNumDisplays(void)      { return numDisplays; }
+static int32 topoCurrentDisplay(void)   { return currentDisplay; }
+static int32 topoNumVideoModes(void)    { return numModes; }
+static int32 topoCurrentVideoMode(void) { return currentMode; }
+
+static rw::bool32
+topoSetDisplay(int32 n)
+{
+	SDL_DisplayID *ids = SDL_GetDisplays(&numDisplays);
+	if(ids == nil)
+		return 0;
+	if(n < 0 || n >= numDisplays){
+		SDL_free(ids);
+		return 0;
+	}
+	currentDisplay = n;
+	currentDisplayID = ids[n];
+	SDL_free(ids);
+
+	buildModeList();
+	currentMode = 0;
+	return 1;
+}
+
+static rw::bool32
+topoDisplayName(int32 n, char *buf, int32 buflen)
+{
+	SDL_DisplayID *ids = SDL_GetDisplays(&numDisplays);
+	const char *name;
+	if(ids == nil)
+		return 0;
+	if(n < 0 || n >= numDisplays){
+		SDL_free(ids);
+		return 0;
+	}
+	name = SDL_GetDisplayName(ids[n]);
+	SDL_free(ids);
+	if(name == nil)
+		return 0;
+	strncpy(buf, name, buflen-1);
+	buf[buflen-1] = '\0';
+	return 1;
+}
+
+static rw::bool32
+topoSetVideoMode(int32 n)
+{
+	if(n < 0 || n >= numModes)
+		return 0;
+	currentMode = n;
+	/* Applying it means recreating the window; only the selection is
+	 * recorded for now. */
+	return 1;
+}
+
+static rw::bool32
+topoVideoModeInfo(int32 n, rw::VideoMode *out)
+{
+	if(n < 0 || n >= numModes)
+		return 0;
+	*out = modes[n];
+	return 1;
+}
+
+static int32
+topoMaxMultiSamplingLevels(void)
+{
+	GLint maxSamples = 0;
+	glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+	return maxSamples == 0 ? 1 : maxSamples;
+}
+
+static int32      topoMultiSamplingLevels(void) { return host::config.numSamples; }
+static rw::bool32 topoSetMultiSamplingLevels(int32 n)
+{
+	/* MSAA is a context-creation attribute and the context already exists
+	 * by the time librw can ask, so only a no-op change can succeed. */
+	return n == host::config.numSamples;
+}
+
+static const rw::DisplayTopology topology = {
+	topoNumDisplays,
+	topoCurrentDisplay,
+	topoSetDisplay,
+	topoDisplayName,
+
+	topoNumVideoModes,
+	topoCurrentVideoMode,
+	topoSetVideoMode,
+	topoVideoModeInfo,
+
+	topoMaxMultiSamplingLevels,
+	topoMultiSamplingLevels,
+	topoSetMultiSamplingLevels,
+};
+
 static bool
 createSurface(void)
 {
@@ -234,6 +409,11 @@ createSurface(void)
 
 	if(!SDL_InitSubSystem(SDL_INIT_VIDEO)){
 		fprintf(stderr, "SDL_InitSubSystem: %s\n", SDL_GetError());
+		return false;
+	}
+
+	if(!topoSetDisplay(0)){
+		fprintf(stderr, "no display found: %s\n", SDL_GetError());
 		return false;
 	}
 
@@ -267,6 +447,7 @@ createSurface(void)
 	engineOpenParams.swapBuffers = swapThunk;
 	engineOpenParams.setSwapInterval    = intervalThunk;
 	engineOpenParams.getFramebufferSize = sizeThunk;
+	engineOpenParams.topology    = &topology;
 	engineOpenParams.width       = host::config.width;
 	engineOpenParams.height      = host::config.height;
 	engineOpenParams.windowtitle = host::config.title;
@@ -370,6 +551,8 @@ main(int argc, char *argv[])
 	SDL_GL_DestroyContext(glcontext);
 	SDL_DestroyWindow(window);
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+	free(modes);
+	modes = nil;
 
 	return 0;
 }
