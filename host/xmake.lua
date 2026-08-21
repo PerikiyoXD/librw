@@ -16,14 +16,11 @@ target("host")
     librw_apply_backend()
 
     add_includedirs(".", {public = true})
+    add_includedirs("../include")
 
     -- glfw.cpp / sdl2.cpp / sdl3.cpp guard their whole body on the gfxlib
     -- define; win.cpp on _WIN32. The inactive ones compile to nothing.
     add_files("*.cpp")
-
-    -- Phase A: host still fills rw::EngineOpenParams, so it needs rw.h.
-    -- Phase B removes that and this dep becomes headers-only.
-    add_deps("librw")
 
     local gfxpkg = librw_gfxlib_package()
     if gfxpkg then

@@ -539,9 +539,9 @@ static RasterFormatInfo formatInfoRW[16] = {
 	{ D3DFMT_L8,        8, 0, Raster::LUM8 },
 	{ D3DFMT_A8R8G8B8, 32, 1, Raster::C8888 },
 	{ D3DFMT_X8R8G8B8, 32, 0, Raster::C888 },
-	{ D3DFMT_UNKNOWN,  16, 0, Raster::D16 },
-	{ D3DFMT_UNKNOWN,  32, 0, Raster::D24 },
-	{ D3DFMT_UNKNOWN,  32, 0, Raster::D32 },
+	{ (uint32)D3DFMT_UNKNOWN, 16, 0, Raster::D16 },
+	{ (uint32)D3DFMT_UNKNOWN, 32, 0, Raster::D24 },
+	{ (uint32)D3DFMT_UNKNOWN, 32, 0, Raster::D32 },
 	{ D3DFMT_X1R5G5B5, 16, 0, Raster::C555 }
 };
 

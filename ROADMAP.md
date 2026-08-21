@@ -66,12 +66,10 @@ compile-time GLES work was parked by renaming its guards to `xxxRW_GLES2`
 
 ## Known issues
 
-- Selecting a video mode does not apply it. `host::DisplayTopology::setVideoMode`
-  records the choice but does not act on it, because switching resolution or
-  going fullscreen means recreating the window and the GL context, which
-  invalidates every raster librw has uploaded. Enumeration is real; applying
-  is not implemented on any GL host.
-- `setMultiSamplingLevels` can only succeed as a no-op on GL. MSAA is a
+- Window-system fullscreen policy belongs to `host`. GLFW, SDL2 and SDL3
+  switch their existing windows in place; D3D9 receives only the resulting
+  presentation size/state and performs a checked swapchain reset.
+- `setMultiSamplingLevels` can only succeed as a no-op after GL startup. MSAA is a
   context-creation attribute, and by the time librw can ask, the context
   exists. The host reads it from `host::config` before creating the window,
   so it must be chosen before `Engine::open`.
@@ -89,8 +87,9 @@ compile-time GLES work was parked by renaming its guards to `xxxRW_GLES2`
   with the `include/` split.
 - The installed tree is unusable for skeleton: `skeleton.h` includes
   `"imgui.h"` but no imgui headers are installed.
-- No test suite exists. Verification is "the four devices build" plus manual
-  runs of the windowed tools.
+- No automated runtime test suite exists. `buildall-win.ps1` verifies release
+  and debug builds for the five supported Windows x64 configurations; drawing,
+  fullscreen and multi-monitor behavior still require manual runs.
 
 ## Source layout
 
@@ -165,10 +164,12 @@ Key codes and mouse state are windowing concerns and live in the host layer.
 `skeleton.h` pulls them back into `sk::` with a using-directive, so existing
 code writing `sk::KEY_ESC` or `sk::MouseState` still compiles.
 
-### Applications no longer define `engineOpenParams`
+### Applications receive `host::surface`
 
-It used to be defined in every application's `main.cpp` and filled by the
-window layer. The host owns it now; delete your definition.
+Applications no longer define a global `engineOpenParams`. The host exposes
+window-system data as `host::surface`; the application translates that into
+an `rw::EngineOpenParams` when opening librw. This keeps RenderWare types out
+of the host layer.
 
 ### `RW_GLES2` / `RW_GLES3` are rejected
 
@@ -185,7 +186,8 @@ assembler for `tools/ps2test/vu/*.dsm`.
 its own include root. Sources are unmodified upstream.
 
 - **glad** — generated, not hand-written. Regenerate with glad 0.1.x using
-  `--api="gl=3.3,gles2=3.1" --profile=core --generator=c`. Current export is
+  `--profile="core" --api="gl=3.3,gles2=3.1" --generator="c" --spec="gl"`
+  `--no-loader --extensions="GL_EXT_framebuffer_object,GL_EXT_texture_compression_s3tc,GL_EXT_texture_filter_anisotropic,GL_KHR_debug,GL_KHR_texture_compression_astc_ldr"`. Current export is
   0.1.34 (2021-02-17). Kept vendored because reproducing that exact API/profile
   pair through a package is unreliable.
 - **lodepng** — also available as an xrepo package via `--lodepng=xrepo`.

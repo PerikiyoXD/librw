@@ -4,11 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL.h>
-#include <rw.h>
+#include <rw/librwconf.h>
 #include "host.h"
 
 using namespace host;
-using namespace rw;
 
 #ifdef RW_OPENGL
 
@@ -164,7 +163,7 @@ charinput(GLFWwindow *window, unsigned int c)
 static void
 resize(GLFWwindow *window, int w, int h)
 {
-	rw::Rect r;
+	host::WindowRect r;
 	r.x = 0;
 	r.y = 0;
 	r.w = w;
@@ -176,7 +175,7 @@ static void
 mousebtn(GLFWwindow *window, int button, int action, int mods)
 {
 	static int buttons = 0;
-	host::MouseState ms;
+	host::MouseState ms = {};
 
 	switch(button){
 	case GLFW_MOUSE_BUTTON_LEFT:
@@ -199,7 +198,7 @@ mousebtn(GLFWwindow *window, int button, int action, int mods)
 		break;
 	}
 
-	host::MouseState ms;
+	host::MouseState ms = {};
 	ms.buttons = buttons;
 	if(callbacks.mouseButton) callbacks.mouseButton(&ms);
 }
@@ -211,9 +210,10 @@ BUTTON_MIDDLE = 0x2,
 BUTTON_RIGHT = 0x4,
 };
 
-/* Window and GL context creation, moved out of librw's gl3device.cpp:
- * context attributes are window-creation hints, so profile selection and
- * window creation are one operation. */
+/* Window and GL context creation.
+ *
+ * Context attributes are window-creation hints, so profile selection and
+ * window creation are a single operation. */
 
 static SDL_GLContext glcontext;
 
@@ -221,22 +221,23 @@ static void *procThunk(const char *name)   { return (void*)SDL_GL_GetProcAddress
 static void  swapThunk(void *w)            { SDL_GL_SwapWindow((SDL_Window*)w); }
 static void  intervalThunk(void *w, int i) { SDL_GL_SetSwapInterval(i); }
 static void  sizeThunk(void *w, int *ww, int *hh)
-	{ SDL_GetWindowSize((SDL_Window*)w, ww, hh); }
+	{ SDL_GL_GetDrawableSize((SDL_Window*)w, ww, hh); }
 
-/* ---- display topology ---------------------------------------------------
+/* ---- host display data --------------------------------------------------
  *
- * librw cannot enumerate monitors through OpenGL, so it forwards its
- * Engine::get*VideoMode / get*SubSystem calls here. This is the code that
- * used to live in gl3device.cpp, once per windowing library.
- *
- * malloc, not rwNewT: this runs before rw::Engine::init(). See the lifecycle
- * rule in host.h. */
+ * malloc is used because this runs before the application initializes librw. */
 
 static int currentDisplay;
 static int numDisplays;
 static int currentMode;
 
-static rw::VideoMode *modes;
+/* Where the window was before going fullscreen, so leaving fullscreen puts it
+ * back at the same place and size rather than at the configured defaults. */
+static int windowedX, windowedY, windowedW, windowedH;
+
+/* Parallel portable/native arrays retain refresh rate and pixel format. */
+static host::DisplayMode *modes;
+static SDL_DisplayMode *nativeModes;
 static int numModes;
 
 static int
@@ -260,8 +261,10 @@ buildModeList(void)
 		n = 0;
 
 	free(modes);
-	modes = (rw::VideoMode*)malloc((n+1) * sizeof(rw::VideoMode));
-	if(modes == nil){
+	free(nativeModes);
+	modes       = (host::DisplayMode*)malloc((n+1) * sizeof(host::DisplayMode));
+	nativeModes = (SDL_DisplayMode*)malloc((n+1) * sizeof(SDL_DisplayMode));
+	if(modes == 0 || nativeModes == 0){
 		numModes = 0;
 		return;
 	}
@@ -272,6 +275,7 @@ buildModeList(void)
 		modes[0].height = m.h;
 		modes[0].depth  = modeDepth(&m);
 		modes[0].flags  = 0;
+		nativeModes[0]  = m;
 		numModes = 1;
 	}else
 		numModes = 0;
@@ -284,23 +288,40 @@ buildModeList(void)
 			if(modes[j].width == m.w && modes[j].height == m.h &&
 			   modes[j].depth == modeDepth(&m))
 				break;
-		if(j < numModes)
+		if(j < numModes){
+			if(m.refresh_rate > nativeModes[j].refresh_rate)
+				nativeModes[j] = m;
 			continue;	/* already have this resolution */
+		}
 		modes[numModes].width  = m.w;
 		modes[numModes].height = m.h;
 		modes[numModes].depth  = modeDepth(&m);
-		modes[numModes].flags  = rw::VIDEOMODEEXCLUSIVE;
+		modes[numModes].flags  = host::DISPLAYMODEEXCLUSIVE;
+		nativeModes[numModes]  = m;
 		numModes++;
 	}
 }
 
-static int32 topoNumDisplays(void)      { return numDisplays; }
-static int32 topoCurrentDisplay(void)   { return currentDisplay; }
-static int32 topoNumVideoModes(void)    { return numModes; }
-static int32 topoCurrentVideoMode(void) { return currentMode; }
+static int topoNumDisplays(void)      { return numDisplays; }
 
-static rw::bool32
-topoSetDisplay(int32 n)
+/* Report the display the window is really on, not the one selected at
+ * startup -- the user can drag the window to another monitor. SDL fullscreens
+ * a window on its own display, so this only affects reporting. */
+static int
+topoCurrentDisplay(void)
+{
+	if(window){
+		int d = SDL_GetWindowDisplayIndex(window);
+		if(d >= 0)
+			currentDisplay = d;
+	}
+	return currentDisplay;
+}
+static int topoNumVideoModes(void)    { return numModes; }
+static int topoCurrentVideoMode(void) { return currentMode; }
+
+static bool
+topoSetDisplay(int n)
 {
 	numDisplays = SDL_GetNumVideoDisplays();
 	if(n < 0 || n >= numDisplays)
@@ -311,33 +332,79 @@ topoSetDisplay(int32 n)
 	return 1;
 }
 
-static rw::bool32
-topoDisplayName(int32 n, char *buf, int32 buflen)
+static bool
+topoDisplayName(int n, char *buf, int buflen)
 {
 	const char *name;
 	if(n < 0 || n >= SDL_GetNumVideoDisplays())
 		return 0;
 	name = SDL_GetDisplayName(n);
-	if(name == nil)
+	if(name == 0)
 		return 0;
 	strncpy(buf, name, buflen-1);
 	buf[buflen-1] = '\0';
 	return 1;
 }
 
-static rw::bool32
-topoSetVideoMode(int32 n)
+/* Applying a mode does NOT recreate the window or the GL context: SDL
+ * switches an existing window in place, so every raster librw has uploaded
+ * stays valid. The resize event fires and the app resizes its cameras. */
+static bool
+topoSetVideoMode(int n)
 {
 	if(n < 0 || n >= numModes)
 		return 0;
+	if(window == 0){
+		currentMode = n;
+		return 1;	/* chosen before the window exists */
+	}
+
+	if(modes[n].flags & host::DISPLAYMODEEXCLUSIVE){
+		if((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) == 0){
+			SDL_GetWindowPosition(window, &windowedX, &windowedY);
+			SDL_GetWindowSize(window, &windowedW, &windowedH);
+		}
+		if(SDL_SetWindowDisplayMode(window, &nativeModes[n]) != 0)
+			return 0;
+		if(SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN) != 0)
+			return 0;
+		currentMode = n;
+		return 1;
+	}
+	if(SDL_SetWindowFullscreen(window, 0) != 0)
+		return 0;
+	SDL_SetWindowSize(window, windowedW, windowedH);
+	SDL_SetWindowPosition(window, windowedX, windowedY);
 	currentMode = n;
-	/* Applying it means recreating the window; only the selection is
-	 * recorded for now. */
 	return 1;
 }
 
-static rw::bool32
-topoVideoModeInfo(int32 n, rw::VideoMode *out)
+static bool
+applyFullscreen(bool enable)
+{
+	if(window == 0){
+		surface.fullscreen = enable;
+		return true;
+	}
+	if(surface.fullscreen == enable)
+		return true;
+	if(enable){
+		SDL_GetWindowPosition(window, &windowedX, &windowedY);
+		SDL_GetWindowSize(window, &windowedW, &windowedH);
+		if(SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP) != 0)
+			return false;
+	}else{
+		if(SDL_SetWindowFullscreen(window, 0) != 0)
+			return false;
+		SDL_SetWindowSize(window, windowedW, windowedH);
+		SDL_SetWindowPosition(window, windowedX, windowedY);
+	}
+	surface.fullscreen = enable;
+	return true;
+}
+
+static bool
+topoVideoModeInfo(int n, host::DisplayMode *out)
 {
 	if(n < 0 || n >= numModes)
 		return 0;
@@ -345,37 +412,19 @@ topoVideoModeInfo(int32 n, rw::VideoMode *out)
 	return 1;
 }
 
-static int32
+static int
 topoMaxMultiSamplingLevels(void)
 {
-	GLint maxSamples = 0;
-	glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-	return maxSamples == 0 ? 1 : maxSamples;
+	return host::config.numSamples > 1 ? host::config.numSamples : 1;
 }
 
-static int32      topoMultiSamplingLevels(void) { return host::config.numSamples; }
-static rw::bool32 topoSetMultiSamplingLevels(int32 n)
+static int  topoMultiSamplingLevels(void) { return host::config.numSamples; }
+static bool topoSetMultiSamplingLevels(int n)
 {
 	/* MSAA is a context-creation attribute and the context already exists
 	 * by the time librw can ask, so only a no-op change can succeed. */
 	return n == host::config.numSamples;
 }
-
-static const rw::DisplayTopology topology = {
-	topoNumDisplays,
-	topoCurrentDisplay,
-	topoSetDisplay,
-	topoDisplayName,
-
-	topoNumVideoModes,
-	topoCurrentVideoMode,
-	topoSetVideoMode,
-	topoVideoModeInfo,
-
-	topoMaxMultiSamplingLevels,
-	topoMultiSamplingLevels,
-	topoSetMultiSamplingLevels,
-};
 
 static bool
 createSurface(void)
@@ -398,7 +447,13 @@ createSurface(void)
 		return false;
 	}
 
-	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, host::config.numSamples);
+	if(host::config.numSamples > 1){
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, host::config.numSamples);
+	}else{
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+	}
 
 	int i;
 	for(i = 0; profiles[i].profile; i++){
@@ -409,29 +464,34 @@ createSurface(void)
 		if(window)
 			break;
 	}
-	if(window == nil){
+	if(window == 0){
 		fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
 		return false;
 	}
 
 	glcontext = SDL_GL_CreateContext(window);
-	if(glcontext == nil){
+	if(glcontext == 0){
 		fprintf(stderr, "SDL_GL_CreateContext: %s\n", SDL_GetError());
 		return false;
 	}
+	SDL_SetWindowPosition(window, host::config.x, host::config.y);
 
-	engineOpenParams.window      = window;
-	engineOpenParams.glcontext   = glcontext;
-	engineOpenParams.gles        = profiles[i].profile == SDL_GL_CONTEXT_PROFILE_ES;
-	engineOpenParams.glversion   = profiles[i].major*10 + profiles[i].minor;
-	engineOpenParams.getProc     = procThunk;
-	engineOpenParams.swapBuffers = swapThunk;
-	engineOpenParams.setSwapInterval    = intervalThunk;
-	engineOpenParams.getFramebufferSize = sizeThunk;
-	engineOpenParams.topology    = &topology;
-	engineOpenParams.width       = host::config.width;
-	engineOpenParams.height      = host::config.height;
-	engineOpenParams.windowtitle = host::config.title;
+	SDL_GetWindowPosition(window, &windowedX, &windowedY);
+	SDL_GetWindowSize(window, &windowedW, &windowedH);
+
+	surface.window      = window;
+	surface.glcontext   = glcontext;
+	surface.gles        = profiles[i].profile == SDL_GL_CONTEXT_PROFILE_ES;
+	surface.glversion   = profiles[i].major*10 + profiles[i].minor;
+	surface.getProc     = procThunk;
+	surface.swapBuffers = swapThunk;
+	surface.setSwapInterval    = intervalThunk;
+	surface.getFramebufferSize = sizeThunk;
+	surface.width       = host::config.width;
+	surface.height      = host::config.height;
+	surface.numSamples  = host::config.numSamples;
+	surface.fullscreen  = false;
+	surface.title       = host::config.title;
 	return true;
 }
 
@@ -443,6 +503,10 @@ main(int argc, char *argv[])
 
 	if(!createSurface())
 		return 0;
+	if(host::config.fullscreen && !host::setFullscreen(true)){
+		fprintf(stderr, "could not enter fullscreen: %s\n", SDL_GetError());
+		return 0;
+	}
 
 	if(callbacks.rwInitialize && !callbacks.rwInitialize())
 		return 0;
@@ -463,10 +527,8 @@ main(int argc, char *argv[])
 			case SDL_WINDOWEVENT:
 				switch (event.window.event) {
 				case SDL_WINDOWEVENT_RESIZED: {
-					rw::Rect r;
-					SDL_GetWindowPosition(window, &r.x, &r.y);
-					r.w = event.window.data1;
-					r.h = event.window.data2;
+					host::WindowRect r = { 0, 0, 0, 0 };
+					SDL_GL_GetDrawableSize(window, &r.w, &r.h);
 					if(callbacks.resize) callbacks.resize(&r);
 					break;
 				}
@@ -478,6 +540,9 @@ main(int argc, char *argv[])
 				break;
 			}
 			case SDL_KEYDOWN: {
+				if(event.key.repeat == 0 && event.key.keysym.sym == SDLK_RETURN &&
+				   (event.key.keysym.mod & KMOD_ALT))
+					host::setFullscreen(!host::isFullscreen());
 				int c = keyCodeToSkKey(event.key.keysym.sym);
 				if(callbacks.keyDown) callbacks.keyDown(c);
 				break;
@@ -491,7 +556,7 @@ main(int argc, char *argv[])
 				break;
 			}
 			case SDL_MOUSEMOTION: {
-				host::MouseState ms;
+				host::MouseState ms = {};
 				ms.posx = event.motion.x;
 				ms.posy = event.motion.y;
 				if(callbacks.mouseMove) callbacks.mouseMove(&ms);
@@ -503,7 +568,7 @@ main(int argc, char *argv[])
 				case SDL_BUTTON_MIDDLE: mouseButtons |= BUTTON_MIDDLE; break;
 				case SDL_BUTTON_RIGHT: mouseButtons |= BUTTON_RIGHT; break;
 				}
-				host::MouseState ms;
+				host::MouseState ms = {};
 				ms.buttons = mouseButtons;
 				if(callbacks.mouseButton) callbacks.mouseButton(&ms);
 				break;
@@ -514,7 +579,7 @@ main(int argc, char *argv[])
 				case SDL_BUTTON_MIDDLE: mouseButtons &= ~BUTTON_MIDDLE; break;
 				case SDL_BUTTON_RIGHT: mouseButtons &= ~BUTTON_RIGHT; break;
 				}
-				host::MouseState ms;
+				host::MouseState ms = {};
 				ms.buttons = mouseButtons;
 				if(callbacks.mouseButton) callbacks.mouseButton(&ms);
 				break;
@@ -537,12 +602,17 @@ main(int argc, char *argv[])
 	SDL_DestroyWindow(window);
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
 	free(modes);
-	modes = nil;
+	free(nativeModes);
+	modes = 0;
+	nativeModes = 0;
 
 	return 0;
 }
 
 namespace host {
+
+bool setFullscreen(bool enable) { return applyFullscreen(enable); }
+bool isFullscreen(void) { return surface.fullscreen; }
 
 void
 setMousePosition(int x, int y)

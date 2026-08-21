@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidateSet("release", "debug", "all")]
+    [string]$Mode = "all"
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -13,6 +16,8 @@ $configurations = @(
     [pscustomobject]@{ Backend = "d3d9"; GfxLib = $null },
     [pscustomobject]@{ Backend = "null"; GfxLib = $null }
 )
+
+$modes = if ($Mode -eq "all") { @("release", "debug") } else { @($Mode) }
 
 $runStarted = Get-Date
 $runId = $runStarted.ToString("yyyyMMdd-HHmmss")
@@ -47,10 +52,12 @@ function Run-XmakeStep {
     return $exitCode
 }
 
-$results = foreach ($configuration in $configurations) {
+$results = foreach ($buildMode in $modes) {
+  foreach ($configuration in $configurations) {
     $backend = $configuration.Backend
     $gfxlib = $configuration.GfxLib
-    $name = if ($gfxlib) { "$backend-$gfxlib" } else { $backend }
+    $combination = if ($gfxlib) { "$backend-$gfxlib" } else { $backend }
+    $name = "$combination-$buildMode"
     $logPath = Join-Path $logDirectory "$name.log"
     $configurationStarted = Get-Date
 
@@ -61,6 +68,7 @@ $results = foreach ($configuration in $configurations) {
         "f",
         "-p", "windows",
         "-a", "x64",
+        "-m", $buildMode,
         "--backend=$backend",
         "-y"
     )
@@ -96,13 +104,14 @@ $results = foreach ($configuration in $configurations) {
         Failure = $failure
         Log = $logPath
     }
+  }
 }
 
 Write-Host ""
 Write-Host "========== Build summary ==========" -ForegroundColor Yellow
 foreach ($result in $results) {
     $color = if ($result.Status -eq "OK") { "Green" } else { "Red" }
-    Write-Host ("{0,-12} {1,-4} {2,7:n1}s" -f $result.Configuration, $result.Status, $result.Seconds) -ForegroundColor $color
+    Write-Host ("{0,-20} {1,-4} {2,7:n1}s" -f $result.Configuration, $result.Status, $result.Seconds) -ForegroundColor $color
     if ($result.Failure) {
         Write-Host ("  {0}" -f $result.Failure) -ForegroundColor Red
     }
@@ -117,4 +126,4 @@ if ($failed.Count -gt 0) {
     exit 1
 }
 
-Write-Host "All Windows x64 configurations built successfully." -ForegroundColor Green
+Write-Host "All requested Windows x64 configurations built successfully." -ForegroundColor Green

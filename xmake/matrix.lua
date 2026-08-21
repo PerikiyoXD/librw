@@ -38,14 +38,14 @@ LIBRW_GFXLIBS = {
 LIBRW_GFXLIB_ORDER = {"glfw", "sdl2", "sdl3"}
 
 -- Only platforms with evidence behind them: windows/mingw/linux/macosx come
--- from CMakeLists.txt, cross covers the PS2 toolchain. Platforms absent here
--- fall back to LIBRW_BACKEND_ORDER rather than being guessed at.
+-- from CMakeLists.txt. The old `cross` row claimed a PS2 xmake toolchain that
+-- does not exist; PS2 remains available only to an explicitly configured
+-- custom platform/toolchain.
 LIBRW_PLATFORM_BACKENDS = {
     windows  = {"null", "gl3", "d3d9"},
     mingw    = {"null", "gl3", "d3d9"},
     linux    = {"null", "gl3"},
     macosx   = {"null", "gl3"},
-    cross    = {"null", "gl3", "ps2"},
 }
 
 -- Cannot open a window, so cannot build skeleton or any windowed tool.

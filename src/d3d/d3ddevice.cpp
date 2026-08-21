@@ -1218,6 +1218,33 @@ restoreVideoMemory(void)
 	restoreD3d9Device();
 }
 
+static bool
+resetD3D9(const D3DPRESENT_PARAMETERS &requested)
+{
+	D3DPRESENT_PARAMETERS old = d3d9Globals.present;
+	D3DPRESENT_PARAMETERS next = requested;
+	releaseVideoMemory();
+	HRESULT hr = d3ddevice->Reset(&next);
+	if(SUCCEEDED(hr)){
+		d3d9Globals.present = next;
+		restoreVideoMemory();
+		return true;
+	}
+
+	/* Reset failure leaves default-pool resources released. Recover the old
+	 * presentation before returning failure so the caller can safely restore
+	 * its native-window state. */
+	D3DPRESENT_PARAMETERS recovery = old;
+	HRESULT recoveryHr = d3ddevice->Reset(&recovery);
+	if(SUCCEEDED(recoveryHr)){
+		d3d9Globals.present = recovery;
+		restoreVideoMemory();
+	}else{
+		RWERROR((ERR_GENERAL, "Direct3D9 Reset and recovery both failed"));
+	}
+	return false;
+}
+
 static void
 beginUpdate(Camera *cam)
 {
@@ -1298,15 +1325,12 @@ beginUpdate(Camera *cam)
 	RECT r;
 	GetClientRect(d3d9Globals.window, &r);
 	BOOL icon = IsIconic(d3d9Globals.window);
-	if(!icon &&
+	if(!icon && d3d9Globals.present.Windowed &&
 	   (r.right != d3d9Globals.present.BackBufferWidth || r.bottom != d3d9Globals.present.BackBufferHeight)){
-
-		d3d9Globals.present.BackBufferWidth = r.right;
-		d3d9Globals.present.BackBufferHeight = r.bottom;
-
-		releaseVideoMemory();
-		d3d::d3ddevice->Reset(&d3d9Globals.present);
-		restoreVideoMemory();
+		D3DPRESENT_PARAMETERS next = d3d9Globals.present;
+		next.BackBufferWidth = r.right;
+		next.BackBufferHeight = r.bottom;
+		resetD3D9(next);
 	}
 
 	setRenderSurfaces(cam);
@@ -1345,10 +1369,9 @@ showRaster(Raster *raster, uint32 flag)
 {
 	UINT interval = flag & Raster::FLIPWAITVSYNCH ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
 	if(d3d9Globals.present.PresentationInterval != interval){
-		d3d9Globals.present.PresentationInterval = interval;
-		releaseVideoMemory();
-		d3d::d3ddevice->Reset(&d3d9Globals.present);
-		restoreVideoMemory();
+		D3DPRESENT_PARAMETERS next = d3d9Globals.present;
+		next.PresentationInterval = interval;
+		resetD3D9(next);
 	}
 
 	// not used but we want cameras to have rasters
@@ -1359,9 +1382,7 @@ showRaster(Raster *raster, uint32 flag)
 		res = d3ddevice->TestCooperativeLevel();
 		// lost while being minimized, not reset once we're back
 		if(res == D3DERR_DEVICENOTRESET){
-			releaseVideoMemory();
-			d3d::d3ddevice->Reset(&d3d9Globals.present);
-			restoreVideoMemory();
+			resetD3D9(d3d9Globals.present);
 		}
 	}
 }
@@ -1514,6 +1535,10 @@ openD3D(EngineOpenParams *params)
 	d3d9Globals.modes = nil;
 	d3d9Globals.numModes = 0;
 	d3d9Globals.currentMode = 0;
+	d3d9Globals.requestedWidth = params->width;
+	d3d9Globals.requestedHeight = params->height;
+	d3d9Globals.requestedFullscreen = params->fullscreen;
+	d3d9Globals.msLevel = params->numSamples > 1 ? params->numSamples : 1;
 
 	d3d9Globals.d3d9 = Direct3DCreate9(D3D_SDK_VERSION);
 	if(d3d9Globals.d3d9 == nil){
@@ -1524,13 +1549,21 @@ openD3D(EngineOpenParams *params)
 	d3d9Globals.numAdapters = d3d9Globals.d3d9->GetAdapterCount();
 	d3d9Globals.adapter = 0;
 
+	/* Prefer the adapter backing the monitor that owns the supplied window.
+	 * This keeps the D3D device and host fullscreen policy on the same GPU and
+	 * display without making the host enumerate Direct3D adapters. */
+	HMONITOR targetMonitor = MonitorFromWindow(win, MONITOR_DEFAULTTONEAREST);
+	for(d3d9Globals.adapter = 0; d3d9Globals.adapter < d3d9Globals.numAdapters; d3d9Globals.adapter++)
+		if(d3d9Globals.d3d9->GetAdapterMonitor(d3d9Globals.adapter) == targetMonitor &&
+		   d3d9Globals.d3d9->GetDeviceCaps(d3d9Globals.adapter, D3DDEVTYPE_HAL, &d3d9Globals.caps) == D3D_OK)
+			goto found;
 	for(d3d9Globals.adapter = 0; d3d9Globals.adapter < d3d9Globals.numAdapters; d3d9Globals.adapter++)
 		if(d3d9Globals.d3d9->GetDeviceCaps(d3d9Globals.adapter, D3DDEVTYPE_HAL, &d3d9Globals.caps) == D3D_OK)
 			goto found;
 	// no adapter
 	d3d9Globals.d3d9->Release();
 	d3d9Globals.d3d9 = nil;
-	RWERROR((ERR_GENERAL, "Direct3DCreate9() failed"));
+	RWERROR((ERR_GENERAL, "no usable Direct3D9 HAL adapter found"));
 	return 0;
 
 found:
@@ -1567,7 +1600,7 @@ startD3D(void)
 	d3d9Globals.startMode = d3d9Globals.modes[d3d9Globals.currentMode];
 	format = d3d9Globals.startMode.mode.Format;
 
-	bool windowed = !(d3d9Globals.startMode.flags & VIDEOMODEEXCLUSIVE);
+	bool windowed = !d3d9Globals.requestedFullscreen;
 
 	// Use window size in windowed mode, otherwise get size from video mode
 	if(windowed){
@@ -1578,8 +1611,12 @@ startD3D(void)
 	}else{
 		// this will be much better for restoring after iconification
 		SetWindowLong(d3d9Globals.window, GWL_STYLE, WS_POPUP);
-		width = d3d9Globals.startMode.mode.Width;
-		height = d3d9Globals.startMode.mode.Height;
+		width = d3d9Globals.requestedWidth;
+		height = d3d9Globals.requestedHeight;
+		if(width == 0 || height == 0){
+			width = d3d9Globals.startMode.mode.Width;
+			height = d3d9Globals.startMode.mode.Height;
+		}
 	}
 
 	// See if we can get an alpha channel
@@ -1910,6 +1947,33 @@ finalizeD3D(void)
 }
 
 static int
+reconfigurePresentation(const PresentationParams *request)
+{
+	if(request == nil || request->width <= 0 || request->height <= 0 ||
+	   d3ddevice == nil)
+		return 0;
+
+	D3DPRESENT_PARAMETERS next = d3d9Globals.present;
+	next.BackBufferWidth = request->width;
+	next.BackBufferHeight = request->height;
+	next.Windowed = !request->fullscreen;
+	next.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT;
+	if(request->fullscreen){
+		D3DDISPLAYMODE desktop;
+		if(FAILED(d3d9Globals.d3d9->GetAdapterDisplayMode(
+		     d3d9Globals.adapter, &desktop)))
+			return 0;
+		next.BackBufferFormat = desktop.Format;
+	}
+	if(!resetD3D9(next))
+		return 0;
+	d3d9Globals.requestedWidth = request->width;
+	d3d9Globals.requestedHeight = request->height;
+	d3d9Globals.requestedFullscreen = request->fullscreen;
+	return 1;
+}
+
+static int
 deviceSystem(DeviceReq req, void *arg, int32 n)
 {
 	D3DADAPTER_IDENTIFIER9 adapter;
@@ -1937,7 +2001,7 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 		return d3d9Globals.adapter;
 
 	case DEVICESETSUBSYSTEM:
-		if(n >= d3d9Globals.numAdapters)
+		if(n < 0 || n >= d3d9Globals.numAdapters)
 			return 0;
 		d3d9Globals.adapter = n;
 		if(d3d9Globals.d3d9->GetDeviceCaps(d3d9Globals.adapter, D3DDEVTYPE_HAL, &d3d9Globals.caps) != D3D_OK)
@@ -1946,11 +2010,12 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 		return 1;
 
 	case DEVICEGETSUBSSYSTEMINFO:
-		if(n >= d3d9Globals.numAdapters)
+		if(arg == nil || n < 0 || n >= d3d9Globals.numAdapters)
 			return 0;
-		if(d3d9Globals.d3d9->GetAdapterIdentifier(d3d9Globals.adapter, 0, &adapter) != D3D_OK)
+		if(d3d9Globals.d3d9->GetAdapterIdentifier(n, 0, &adapter) != D3D_OK)
 			return 0;
 		strncpy(((SubSystemInfo*)arg)->name, adapter.Description, sizeof(SubSystemInfo::name));
+		((SubSystemInfo*)arg)->name[sizeof(SubSystemInfo::name)-1] = '\0';
 		return 1;
 
 
@@ -1961,12 +2026,14 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 		return d3d9Globals.currentMode;
 
 	case DEVICESETVIDEOMODE:
-		if(n >= d3d9Globals.numModes)
+		if(n < 0 || n >= d3d9Globals.numModes || Engine::state == Engine::Started)
 			return 0;
 		d3d9Globals.currentMode = n;
 		return 1;
 
 	case DEVICEGETVIDEOMODEINFO:
+		if(arg == nil || n < 0 || n >= d3d9Globals.numModes)
+			return 0;
 		rwmode = (VideoMode*)arg;
 		rwmode->width = d3d9Globals.modes[n].mode.Width;
 		rwmode->height = d3d9Globals.modes[n].mode.Height;
@@ -1975,12 +2042,14 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 		return 1;
 	case DEVICEGETMAXMULTISAMPLINGLEVELS:
 		{
-			assert(d3d9Globals.d3d9 != nil);
+			if(d3d9Globals.d3d9 == nil || d3d9Globals.numModes == 0)
+				return 1;
 			uint32 level;
 			DWORD quality;
+			DisplayMode &mode = d3d9Globals.modes[d3d9Globals.currentMode];
 			for (level = D3DMULTISAMPLE_16_SAMPLES; level > D3DMULTISAMPLE_NONMASKABLE; level--) {
-				if (SUCCEEDED(d3d9Globals.d3d9->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, d3d9Globals.startMode.mode.Format,
-				                                                           !(d3d9Globals.startMode.flags & VIDEOMODEEXCLUSIVE), (D3DMULTISAMPLE_TYPE)level,
+				if (SUCCEEDED(d3d9Globals.d3d9->CheckDeviceMultiSampleType(d3d9Globals.adapter, D3DDEVTYPE_HAL, mode.mode.Format,
+				                                                           !d3d9Globals.requestedFullscreen, (D3DMULTISAMPLE_TYPE)level,
 				                                                           &quality)))
 					return level;
 			}
@@ -1991,8 +2060,13 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 			return 1;
 		return d3d9Globals.msLevel;
 	case DEVICESETMULTISAMPLINGLEVELS:
+		if(n < 1 || n > (int32)Engine::getMaxMultiSamplingLevels() ||
+		   Engine::state == Engine::Started)
+			return 0;
 		d3d9Globals.msLevel = (uint32)n;
 		return 1;
+	case DEVICERECONFIGUREPRESENTATION:
+		return reconfigurePresentation((const PresentationParams*)arg);
 	}
 	return 1;
 }

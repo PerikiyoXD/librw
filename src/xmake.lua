@@ -34,10 +34,9 @@ target("librw")
         add_deps("glad")
     end
 
-    -- No windowing package here, deliberately. librw does not create windows
-    -- or GL contexts and its headers no longer include <SDL.h>/<GLFW/glfw3.h>,
-    -- so SDL/GLFW is the host layer's dependency alone. That is also what
-    -- stops SDL2main's /SUBSYSTEM:WINDOWS leaking into the console tools.
+    -- No windowing package here: librw creates no windows or GL contexts and
+    -- its headers include no SDL/GLFW, so that dependency belongs to the host
+    -- alone. It also keeps SDL2main's /SUBSYSTEM:WINDOWS off the console tools.
 
     on_load(function (target)
         if backend_error then

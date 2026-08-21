@@ -37,6 +37,9 @@ enum DeviceReq
 	DEVICEGETMULTISAMPLINGLEVELS,
 	DEVICESETMULTISAMPLINGLEVELS,
 
+	/* Reconfigure the presentation surface owned by the render device. */
+	DEVICERECONFIGUREPRESENTATION,
+
 };
 
 typedef int DeviceSystem(DeviceReq req, void *arg, int32 n);
@@ -100,13 +103,10 @@ struct Driver
 
 /* What the host hands librw at Engine::open().
  *
- * librw does not create windows or GL contexts -- the host does, and passes
- * the result in here. Everything is either an opaque handle librw never
- * dereferences, or a callback librw uses to reach the window system. That is
- * what keeps SDL and GLFW out of librw's headers entirely.
- *
- * Previously this struct was defined three times, once per device header,
- * with different members; only one was live per build. */
+ * librw does not create windows or GL contexts; the host does and passes the
+ * result in here. Every member is either an opaque handle librw never
+ * dereferences or a callback librw uses to reach the window system, which is
+ * what keeps SDL and GLFW out of librw's headers. */
 struct EngineOpenParams
 {
 	/* Native window handle. HWND for d3d9, an opaque toolkit handle for
@@ -126,23 +126,16 @@ struct EngineOpenParams
 	void  (*setSwapInterval)(void *window, int interval);
 	void  (*getFramebufferSize)(void *window, int *w, int *h);
 
-	/* Who can enumerate monitors and video modes depends on the device, and
-	 * the split is not arbitrary:
-	 *
-	 *   d3d9  Direct3D *is* a display API. IDirect3D9 enumerates adapters
-	 *         and modes, so librw answers these itself and ignores this
-	 *         field.
-	 *   gl3   OpenGL has no notion of a monitor. Only the host can answer,
-	 *         so it supplies this table and librw forwards to it.
-	 *
-	 * May be null, in which case the device reports a single video mode
-	 * matching the current framebuffer. */
-	const struct DisplayTopology *topology;
-
-	/* --- all devices -------------------------------------------------- */
-
 	int32 width, height;
+	uint32 numSamples;
+	bool32 fullscreen;
 	const char *windowtitle;
+};
+
+struct PresentationParams
+{
+	int32 width, height;
+	bool32 fullscreen;
 };
 
 enum MemHint
@@ -198,26 +191,6 @@ struct VideoMode
 	uint32 flags;
 };
 
-/* Supplied by the host for devices that cannot enumerate displays
- * themselves; see EngineOpenParams::topology. Mirrors the Engine::* topology
- * calls, which forward here rather than answering directly. */
-struct DisplayTopology
-{
-	int32  (*numDisplays)(void);
-	int32  (*currentDisplay)(void);
-	bool32 (*setDisplay)(int32 n);
-	bool32 (*displayName)(int32 n, char *buf, int32 buflen);
-
-	int32  (*numVideoModes)(void);
-	int32  (*currentVideoMode)(void);
-	bool32 (*setVideoMode)(int32 n);
-	bool32 (*videoModeInfo)(int32 n, VideoMode *out);
-
-	int32  (*maxMultiSamplingLevels)(void);
-	int32  (*multiSamplingLevels)(void);
-	bool32 (*setMultiSamplingLevels)(int32 n);
-};
-
 struct Camera;
 struct World;
 
@@ -265,6 +238,8 @@ struct Engine
 	static uint32 getMaxMultiSamplingLevels(void);
 	static uint32 getMultiSamplingLevels(void);
 	static bool32 setMultiSamplingLevels(uint32 levels);
+	static bool32 reconfigurePresentation(int32 width, int32 height,
+	                                    bool32 fullscreen);
 
 	static PluginList s_plglist;
 	static int32 registerPlugin(int32 size, uint32 id,

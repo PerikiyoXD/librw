@@ -274,7 +274,11 @@ Engine::open(EngineOpenParams *p)
 	engine->device = null::renderdevice;
 #endif
 
-	engine->device.system(DEVICEOPEN, (void*)p, 0);
+	if(!engine->device.system(DEVICEOPEN, (void*)p, 0)){
+		rwFree(engine);
+		engine = nil;
+		return 0;
+	}
 
 	engine->dummyDefaultPipeline = ObjPipeline::create();
 	for(uint i = 0; i < NUM_PLATFORMS; i++){
@@ -308,13 +312,20 @@ Engine::start(void)
 		return 0;
 	}
 
-	engine->device.system(DEVICEINIT, nil, 0);
+	if(!engine->device.system(DEVICEINIT, nil, 0))
+		return 0;
 
 	Engine::s_plglist.construct(engine);
 	for(uint i = 0; i < NUM_PLATFORMS; i++)
 		Driver::s_plglist[i].construct(rw::engine->driver[i]);
 
-	engine->device.system(DEVICEFINALIZE, nil, 0);
+	if(!engine->device.system(DEVICEFINALIZE, nil, 0)){
+		for(uint i = 0; i < NUM_PLATFORMS; i++)
+			Driver::s_plglist[i].destruct(rw::engine->driver[i]);
+		Engine::s_plglist.destruct(engine);
+		engine->device.system(DEVICETERM, nil, 0);
+		return 0;
+	}
 
 	// Register some image formats. Or should we leave that to the user?
 	Image::registerFileFormat("tga", readTGA, writeTGA);
@@ -447,6 +458,15 @@ bool32
 Engine::setMultiSamplingLevels(uint32 levels)
 {
 	return engine->device.system(DEVICESETMULTISAMPLINGLEVELS, nil, levels);
+}
+
+bool32
+Engine::reconfigurePresentation(int32 width, int32 height, bool32 fullscreen)
+{
+	if(engine == nil || Engine::state != Started || width <= 0 || height <= 0)
+		return 0;
+	PresentationParams params = { width, height, fullscreen };
+	return engine->device.system(DEVICERECONFIGUREPRESENTATION, &params, 0);
 }
 
 

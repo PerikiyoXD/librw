@@ -24,8 +24,6 @@
  * therefore entered through host::callbacks, not through its own main().
  */
 
-#include <rw.h>
-
 namespace host {
 
 /* Canonical key codes. The host maps native keycodes onto these, so the app
@@ -91,37 +89,66 @@ struct Config
 {
 	const char *title;
 	int         width, height;
+
+	/* Initial window position. Hosts whose toolkit places the window for
+	 * them use it only as the position to restore to when leaving
+	 * fullscreen before the window has been moved. */
+	int         x, y;
+
 	int         numSamples;		/* MSAA; 1 = off */
 	bool        fullscreen;
 };
 
-/* PHASE B (not yet implemented): librw currently still creates the window and
- * GL context itself and hands it back through EngineOpenParams. The target is
- * an opaque Surface { window, glcontext, getProc, swapBuffers,
- * setSwapInterval, getFramebufferSize } created here and passed in, so
- * librw's public headers stop including <SDL.h>/<GLFW/glfw3.h>. Display
- * topology (monitors, video modes, MSAA) moves here at the same time, because
- * only the owner of the display connection can answer it.
- *
- * Until then the host owns this global, which the tools each used to define
- * for themselves. */
-extern rw::EngineOpenParams engineOpenParams;
+struct WindowRect
+{
+	int x, y, w, h;
+};
+
+enum DisplayModeFlags
+{
+	DISPLAYMODEEXCLUSIVE = 1
+};
+
+struct DisplayMode
+{
+	int width, height, depth;
+	unsigned int flags;
+};
+
+/* Window-system data exposed to the application. This deliberately mirrors
+ * only the drawable-surface part of rw::EngineOpenParams; host does not
+ * include rw.h or traffic in RenderWare objects. */
+struct Surface
+{
+	void *window;
+	void *glcontext;
+	bool gles;
+	int glversion;
+	void *(*getProc)(const char *name);
+	void  (*swapBuffers)(void *window);
+	void  (*setSwapInterval)(void *window, int interval);
+	void  (*getFramebufferSize)(void *window, int *w, int *h);
+	int width, height;
+	int numSamples;
+	bool fullscreen;
+	const char *title;
+};
+
+extern Surface surface;
 
 /* LIFECYCLE RULE, for host implementors:
  *
  *   Nothing in namespace rw may be USED before callbacks.rwInitialize()
  *   returns. Including rw.h is fine; calling into librw is not.
  *
- * The host runs first -- it creates the window and the GL context before the
+ * The host runs first: it creates the window and the GL context before the
  * app gets rwInitialize() and calls rw::Engine::init(). Until that returns,
- * librw is uninitialised: rw::Engine::memfuncs holds null function pointers,
- * so rwNewT/rwFree call through null, and the allocation tracker has not been
- * set up either. This compiles perfectly and crashes intermittently, which is
- * the worst combination -- it cost a debugger session to find once already.
+ * librw is uninitialised. rw::Engine::memfuncs holds null function pointers,
+ * so rwNewT and rwFree call through null, and the allocation tracker is not
+ * set up. Such a call compiles cleanly and faults intermittently at runtime.
  *
- * Use malloc/free for the host's own bookkeeping. The host is not a librw
- * allocation client; that is the same boundary as not linking SDL into librw,
- * applied to memory.
+ * Use malloc/free for the host's own bookkeeping; the host is not a librw
+ * allocation client.
  *
  * Order:
  *   callbacks.initialize()   no window, no librw
@@ -155,10 +182,12 @@ struct Callbacks
 	void (*mouseButton)(const MouseState *m);
 	void (*mouseWheel)(const MouseState *m);
 
-	/* window. rw::Rect because that is what the app already expects; note
-	 * the hosts disagree today on whether x/y are the window position
-	 * (sdl2, sdl3) or zero (glfw, win32). */
-	void (*resize)(rw::Rect *r);
+	/* Window client/drawable size. Coordinates are always client-relative. */
+	void (*resize)(const WindowRect *r);
+
+	/* Called after the native window changed presentation policy. GL hosts
+	 * leave this null; the Win32/D3D9 host uses it to reset the swapchain. */
+	bool (*presentationChanged)(int width, int height, bool fullscreen);
 
 	/* per frame, seconds since previous idle */
 	void (*idle)(float timeDelta);
@@ -174,6 +203,9 @@ extern Config config;
 void requestQuit(void);
 
 void setMousePosition(int x, int y);
+
+bool setFullscreen(bool enable);
+bool isFullscreen(void);
 
 /* Host internal, implemented in host.cpp: the event loop's stop condition. */
 bool quitting(void);

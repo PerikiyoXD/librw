@@ -15,34 +15,22 @@ InitRW(void)
 		return false;
 	if(AppEventHandler(sk::PLUGINATTACH, nil) == EVENTERROR)
 		return false;
-	if(!rw::Engine::open(&host::engineOpenParams))
+	rw::EngineOpenParams params = {};
+	params.window = host::surface.window;
+	params.glcontext = host::surface.glcontext;
+	params.gles = host::surface.gles;
+	params.glversion = host::surface.glversion;
+	params.getProc = host::surface.getProc;
+	params.swapBuffers = host::surface.swapBuffers;
+	params.setSwapInterval = host::surface.setSwapInterval;
+	params.getFramebufferSize = host::surface.getFramebufferSize;
+	params.width = host::surface.width;
+	params.height = host::surface.height;
+	params.numSamples = host::surface.numSamples;
+	params.fullscreen = host::surface.fullscreen;
+	params.windowtitle = host::surface.title;
+	if(!rw::Engine::open(&params))
 		return false;
-
-	SubSystemInfo info;
-	int i, n;
-	n = Engine::getNumSubSystems();
-	for(i = 0; i < n; i++)
-		if(Engine::getSubSystemInfo(&info, i))
-			;//printf("subsystem: %s\n", info.name);
-	Engine::setSubSystem(n-1);
-
-	int want = -1;
-	VideoMode mode;
-	n = Engine::getNumVideoModes();
-	for(i = 0; i < n; i++)
-		if(Engine::getVideoModeInfo(&mode, i)){
-//			if(mode.width == 640 && mode.height == 480 && mode.depth == 32)
-			if(mode.width == 1920 && mode.height == 1080 && mode.depth == 32)
-				want = i;
-			//printf("mode: %dx%dx%d %d\n", mode.width, mode.height, mode.depth, mode.flags);
-		}
-//	if(want >= 0) Engine::setVideoMode(want);
-	Engine::getVideoModeInfo(&mode, Engine::getCurrentVideoMode());
-
-	if(mode.flags & VIDEOMODEEXCLUSIVE){
-		globals.width = mode.width;
-		globals.height = mode.height;
-	}
 
 	if(!rw::Engine::start())
 		return false;
@@ -243,7 +231,13 @@ void hostMouseButton(const host::MouseState *m)
 void hostMouseWheel(const host::MouseState *m)
 	{ sk::EventHandler(sk::MOUSEWHEEL, (void*)m); }
 
-void hostResize(rw::Rect *r) { sk::EventHandler(sk::RESIZE, r); }
+void hostResize(const host::WindowRect *r)
+{
+	rw::Rect rr = { r->x, r->y, r->w, r->h };
+	sk::EventHandler(sk::RESIZE, &rr);
+}
+bool hostPresentationChanged(int width, int height, bool fullscreen)
+	{ return rw::Engine::reconfigurePresentation(width, height, fullscreen); }
 void hostIdle(float dt)      { sk::EventHandler(sk::IDLE, &dt); }
 
 }
@@ -264,6 +258,7 @@ Callbacks callbacks = {
 	hostMouseWheel,
 
 	hostResize,
+	hostPresentationChanged,
 	hostIdle,
 };
 

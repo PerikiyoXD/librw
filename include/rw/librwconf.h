@@ -39,8 +39,8 @@
 
 /* RW_GLES2/RW_GLES3 are not devices either. GLES is a runtime property of the
  * gl3 device -- see gl3Caps.gles in rw/gl/rwgl3.h and the loader choice in
- * gl3device.cpp. The last compile-time GLES work was parked by renaming its
- * guards to xxxRW_GLES2 (src/gl/gl3shader.cpp). */
+ * gl3device.cpp. The compile-time GLES paths in src/gl/gl3shader.cpp are
+ * disabled, their guards spelled xxxRW_GLES2. */
 #if defined(RW_GLES2) || defined(RW_GLES3)
 #error "librw: RW_GLES2/RW_GLES3 are not render devices. Build RW_GL3; GLES is selected at runtime."
 #endif

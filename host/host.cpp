@@ -3,11 +3,15 @@
 namespace host {
 
 /* Defaults; the app overrides these from callbacks.initialize(). */
-Config config = { "librw", 1280, 800, 1, false };
+Config config = {
+	"librw",	/* title      */
+	1280, 800,	/* width, height */
+	100, 100,	/* x, y       */
+	1,		/* numSamples */
+	false,		/* fullscreen */
+};
 
-/* Phase A: still filled in by the host and read by the app's InitRW.
- * Goes away when librw receives a Surface instead. */
-rw::EngineOpenParams engineOpenParams;
+Surface surface;
 
 static bool quitRequested;
 

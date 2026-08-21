@@ -1430,11 +1430,10 @@ rasterRenderFast(Raster *raster, int32 x, int32 y)
 	return 0;
 }
 
-/* The host created the window and the GL context and made it current; all
- * librw does here is remember the surface. Window creation, the context
- * profile ladder, video-mode enumeration and monitor handling used to live
- * in this file, three times over -- once per windowing library. They are in
- * host/ now. */
+/* The host creates the window and the GL context and makes it current before
+ * Engine::open(); librw only records the surface it was given. Window
+ * creation, context profile selection, video-mode enumeration and monitor
+ * handling all belong to the host. */
 
 static int
 openGL3(EngineOpenParams *params)
@@ -1451,19 +1450,21 @@ closeGL3(void)
 	return 1;
 }
 
+static bool gl3Started;
+
 static int
 startGL3(void)
 {
 	EngineOpenParams *sf = &glGlobals.surface;
 
-	if(sf->window == nil || sf->getProc == nil){
+	if(sf->window == nil || sf->getProc == nil || sf->swapBuffers == nil ||
+	   sf->setSwapInterval == nil || sf->getFramebufferSize == nil){
 		RWERROR((ERR_GENERAL, "no GL surface supplied by the host"));
 		return 0;
 	}
 
-	/* The host told us what kind of context it made, so we know which
-	 * loader to use. Previously this came out of the profile ladder that
-	 * lived here. */
+	/* The host reports what kind of context it created, which selects the
+	 * GL or GLES loader. */
 	gl3Caps.gles = sf->gles;
 	gl3Caps.glversion = sf->glversion;
 
@@ -1472,6 +1473,7 @@ startGL3(void)
 		RWERROR((ERR_GENERAL, "gladLoadGLLoader failed"));
 		return 0;
 	}
+	gl3Started = true;
 
 	glGlobals.presentWidth = 0;
 	glGlobals.presentHeight = 0;
@@ -1640,13 +1642,8 @@ finalizeOpenGL(void)
 	return 1;
 }
 
-/* Display topology forwards to the host. OpenGL has no way to enumerate
- * monitors or modes, so librw cannot answer these itself -- see the comment
- * on EngineOpenParams::topology.
- *
- * When the host supplies no table we report a single mode matching the
- * current framebuffer, which is honest for a fixed window and is what an
- * embedder that never intends to go fullscreen wants. */
+/* Monitor policy is host-owned. The GL device exposes its one current
+ * drawable through the legacy video-mode API for compatibility. */
 
 static int
 describeCurrentMode(VideoMode *out)
@@ -1663,8 +1660,6 @@ describeCurrentMode(VideoMode *out)
 static int
 deviceSystemGL3(DeviceReq req, void *arg, int32 n)
 {
-	const DisplayTopology *topo = glGlobals.surface.topology;
-
 	switch(req){
 	case DEVICEOPEN:
 		return openGL3((EngineOpenParams*)arg);
@@ -1674,49 +1669,50 @@ deviceSystemGL3(DeviceReq req, void *arg, int32 n)
 	case DEVICEINIT:
 		return startGL3() && initOpenGL();
 	case DEVICETERM:
+		gl3Started = false;
 		return termOpenGL() && stopGL3();
 
 	case DEVICEFINALIZE:
 		return finalizeOpenGL();
 
 	case DEVICEGETNUMSUBSYSTEMS:
-		return topo ? topo->numDisplays() : 1;
+		return 1;
 	case DEVICEGETCURRENTSUBSYSTEM:
-		return topo ? topo->currentDisplay() : 0;
+		return 0;
 	case DEVICESETSUBSYSTEM:
-		return topo ? topo->setDisplay(n) : (n == 0);
+		return n == 0;
 	case DEVICEGETSUBSSYSTEMINFO:
-		if(topo)
-			return topo->displayName(n, ((SubSystemInfo*)arg)->name,
-				sizeof(SubSystemInfo::name));
+		if(n != 0 || arg == nil)
+			return 0;
 		strncpy(((SubSystemInfo*)arg)->name, "default",
 			sizeof(SubSystemInfo::name));
+		((SubSystemInfo*)arg)->name[sizeof(SubSystemInfo::name)-1] = '\0';
 		return 1;
 
 	case DEVICEGETNUMVIDEOMODES:
-		return topo ? topo->numVideoModes() : 1;
+		return 1;
 	case DEVICEGETCURRENTVIDEOMODE:
-		return topo ? topo->currentVideoMode() : 0;
+		return 0;
 	case DEVICESETVIDEOMODE:
-		return topo ? topo->setVideoMode(n) : (n == 0);
+		return n == 0;
 	case DEVICEGETVIDEOMODEINFO:
-		return topo ? topo->videoModeInfo(n, (VideoMode*)arg)
-		            : describeCurrentMode((VideoMode*)arg);
+		return n == 0 && arg != nil ? describeCurrentMode((VideoMode*)arg) : 0;
 
 	case DEVICEGETMAXMULTISAMPLINGLEVELS:
-		if(topo)
-			return topo->maxMultiSamplingLevels();
-		else{
+		if(gl3Started){
 			GLint maxSamples;
 			glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
 			return maxSamples == 0 ? 1 : maxSamples;
 		}
+		return glGlobals.surface.numSamples > 1 ? glGlobals.surface.numSamples : 1;
 	case DEVICEGETMULTISAMPLINGLEVELS:
-		return topo ? topo->multiSamplingLevels() : 1;
+		return glGlobals.surface.numSamples > 1 ? glGlobals.surface.numSamples : 1;
 	case DEVICESETMULTISAMPLINGLEVELS:
-		/* Only meaningful before the context exists; the host decides
-		 * whether it can still honour a change. */
-		return topo ? topo->setMultiSamplingLevels(n) : (n <= 1);
+		return n == (int32)(glGlobals.surface.numSamples > 1 ?
+		                     glGlobals.surface.numSamples : 1);
+	case DEVICERECONFIGUREPRESENTATION:
+		/* The GL context survives host-side window/fullscreen changes. */
+		return 1;
 
 	default:
 		assert(0 && "not implemented");

@@ -1,10 +1,10 @@
 #ifdef _WIN32
 #include <windows.h>
-#include <rw.h>
+#include <stdio.h>
+#include <rw/librwconf.h>
 #include "host.h"
 
 using namespace host;
-using namespace rw;
 
 #ifdef RW_D3D9
 
@@ -60,6 +60,9 @@ initkeymap(void)
 	keymap[VK_RMENU] = KEY_RALT;
 }
 bool running;
+static bool appReady;
+static DWORD windowedStyle;
+static WINDOWPLACEMENT windowedPlacement = { sizeof(windowedPlacement) };
 
 static void KeyUp(int key) { if(callbacks.keyUp) callbacks.keyUp(key); }
 static void KeyDown(int key) { if(callbacks.keyDown) callbacks.keyDown(key); }
@@ -71,7 +74,7 @@ WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	static int buttons = 0;
 	POINTS p;
 
-	host::MouseState ms;
+	host::MouseState ms = {};
 	switch(msg){
 	case WM_DESTROY:
 		PostQuitMessage(0);
@@ -79,6 +82,9 @@ WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 	case WM_SYSKEYDOWN:
 	case WM_KEYDOWN:
+		if(wParam == VK_RETURN && (lParam & (1L << 29)) &&
+		   (lParam & (1L << 30)) == 0)
+			host::setFullscreen(!host::isFullscreen());
 		if(wParam == VK_MENU){
 			if(GetKeyState(VK_LMENU) & 0x8000) KeyDown(keymap[VK_LMENU]);
 			if(GetKeyState(VK_RMENU) & 0x8000) KeyDown(keymap[VK_RMENU]);
@@ -141,7 +147,9 @@ WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 
 	case WM_SIZE:
-		rw::Rect r;
+		if(!appReady)
+			break;
+		host::WindowRect r;
 		r.x = 0;
 		r.y = 0;
 		r.w = LOWORD(lParam);
@@ -184,8 +192,6 @@ MakeWindow(HINSTANCE instance, int width, int height, const char *title)
 		return 0;
 	}
 
-	int offx = 100;
-	int offy = 100;
 	RECT rect;
 	rect.left = 0;
 	rect.top = 0;
@@ -197,7 +203,8 @@ MakeWindow(HINSTANCE instance, int width, int height, const char *title)
 	rect.bottom += -rect.top;
 	HWND win;
 	win = CreateWindow("librwD3D9", title, style,
-		offx, offy, rect.right, rect.bottom, 0, 0, instance, 0);
+		host::config.x, host::config.y,
+		rect.right, rect.bottom, 0, 0, instance, 0);
 	if(!win){
 		MessageBox(0, "CreateWindow() - FAILED", 0, 0);
 		return 0;
@@ -248,8 +255,10 @@ WinMain(HINSTANCE instance, HINSTANCE,
 	char **hostArgv = __argv;
 #endif
 
-	if(callbacks.initialize && !callbacks.initialize(hostArgc, hostArgv))
+	if(callbacks.initialize && !callbacks.initialize(hostArgc, hostArgv)){
+		fprintf(stderr, "host initialization failed\n");
 		return 0;
+	}
 
 	HWND win = MakeWindow(instance,
 		host::config.width, host::config.height,
@@ -258,11 +267,23 @@ WinMain(HINSTANCE instance, HINSTANCE,
 		MessageBox(0, "MakeWindow() - FAILED", 0, 0);
 		return 0;
 	}
-	engineOpenParams.window = win;
+	surface.window = win;
+	surface.width = host::config.width;
+	surface.height = host::config.height;
+	surface.numSamples = host::config.numSamples;
+	surface.fullscreen = false;
+	surface.title = host::config.title;
 	initkeymap();
-
-	if(callbacks.rwInitialize && !callbacks.rwInitialize())
+	if(host::config.fullscreen && !host::setFullscreen(true)){
+		fprintf(stderr, "could not enter fullscreen\n");
 		return 0;
+	}
+
+	if(callbacks.rwInitialize && !callbacks.rwInitialize()){
+		fprintf(stderr, "RenderWare initialization failed\n");
+		return 0;
+	}
+	appReady = true;
 
 	INT64 lastTicks;
 	QueryPerformanceCounter((LARGE_INTEGER *)&lastTicks);
@@ -276,6 +297,7 @@ WinMain(HINSTANCE instance, HINSTANCE,
 		lastTicks = ticks;
 	}
 
+	appReady = false;
 	if(callbacks.rwTerminate) callbacks.rwTerminate();
 
 	return 0;
@@ -283,11 +305,67 @@ WinMain(HINSTANCE instance, HINSTANCE,
 
 namespace host {
 
+bool
+setFullscreen(bool enable)
+{
+	HWND win = (HWND)surface.window;
+	if(win == 0){
+		surface.fullscreen = enable;
+		return true;
+	}
+	if(surface.fullscreen == enable)
+		return true;
+
+	DWORD oldStyle = (DWORD)GetWindowLongPtr(win, GWL_STYLE);
+	WINDOWPLACEMENT oldPlacement = { sizeof(oldPlacement) };
+	GetWindowPlacement(win, &oldPlacement);
+	if(enable){
+		MONITORINFO mi = { sizeof(mi) };
+		if(!GetMonitorInfo(MonitorFromWindow(win, MONITOR_DEFAULTTONEAREST), &mi))
+			return false;
+		windowedStyle = oldStyle;
+		windowedPlacement = oldPlacement;
+		SetWindowLongPtr(win, GWL_STYLE,
+			oldStyle & ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX |
+			             WS_MAXIMIZEBOX | WS_SYSMENU));
+		SetWindowPos(win, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+			mi.rcMonitor.right-mi.rcMonitor.left,
+			mi.rcMonitor.bottom-mi.rcMonitor.top,
+			SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+	}else{
+		SetWindowLongPtr(win, GWL_STYLE, windowedStyle);
+		SetWindowPlacement(win, &windowedPlacement);
+		SetWindowPos(win, 0, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+			SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+	}
+
+	RECT client;
+	GetClientRect(win, &client);
+	int width = client.right-client.left;
+	int height = client.bottom-client.top;
+	if(appReady && callbacks.presentationChanged &&
+	   !callbacks.presentationChanged(width, height, enable)){
+		SetWindowLongPtr(win, GWL_STYLE, oldStyle);
+		SetWindowPlacement(win, &oldPlacement);
+		SetWindowPos(win, 0, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+			SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+		return false;
+	}
+	surface.fullscreen = enable;
+	surface.width = width;
+	surface.height = height;
+	return true;
+}
+
+bool isFullscreen(void) { return surface.fullscreen; }
+
 void
 setMousePosition(int x, int y)
 {
 	POINT pos = { x, y };
-	ClientToScreen((HWND)engineOpenParams.window, &pos);
+	ClientToScreen((HWND)surface.window, &pos);
 	SetCursorPos(pos.x, pos.y);
 }
 

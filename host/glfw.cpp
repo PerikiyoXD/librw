@@ -4,11 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <GLFW/glfw3.h>
-#include <rw.h>
+#include <rw/librwconf.h>
 #include "host.h"
 
 using namespace host;
-using namespace rw;
 
 #ifdef RW_OPENGL
 
@@ -148,6 +147,9 @@ static void KeyDown(int key) { if(callbacks.keyDown) callbacks.keyDown(key); }
 static void
 keypress(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
+	if(action == GLFW_PRESS && key == GLFW_KEY_ENTER &&
+	   (mods & GLFW_MOD_ALT))
+		host::setFullscreen(!host::isFullscreen());
 	if(key >= 0 && key <= GLFW_KEY_LAST){
 		if(action == GLFW_RELEASE) KeyUp(keymap[key]);
 		else if(action == GLFW_PRESS)   KeyDown(keymap[key]);
@@ -164,7 +166,7 @@ charinput(GLFWwindow *window, unsigned int c)
 static void
 resize(GLFWwindow *window, int w, int h)
 {
-	rw::Rect r;
+	host::WindowRect r;
 	r.x = 0;
 	r.y = 0;
 	r.w = w;
@@ -175,7 +177,7 @@ resize(GLFWwindow *window, int w, int h)
 static void
 mousemove(GLFWwindow *window, double x, double y)
 {
-	host::MouseState ms;
+	host::MouseState ms = {};
 	ms.posx = x;
 	ms.posy = y;
 	if(callbacks.mouseMove) callbacks.mouseMove(&ms);
@@ -185,7 +187,7 @@ static void
 mousebtn(GLFWwindow *window, int button, int action, int mods)
 {
 	static int buttons = 0;
-	host::MouseState ms;
+	host::MouseState ms = {};
 
 	switch(button){
 	case GLFW_MOUSE_BUTTON_LEFT:
@@ -215,15 +217,16 @@ mousebtn(GLFWwindow *window, int button, int action, int mods)
 static void
 mousewheel(GLFWwindow *window, double x, double y)
 {
-	host::MouseState ms;
+	host::MouseState ms = {};
 	ms.wheelDelta = y;
 	if(callbacks.mouseWheel) callbacks.mouseWheel(&ms);
 }
 
-/* Window and GL context creation. This moved out of librw's gl3device.cpp:
- * context attributes are window-creation hints, so choosing a profile and
- * creating the window are one operation and cannot be split across the
- * boundary. */
+/* Window and GL context creation.
+ *
+ * Context attributes are window-creation hints, so choosing a profile and
+ * creating the window are a single operation and cannot be split across the
+ * host/librw boundary. */
 
 static void
 glfwerr(int error, const char *desc)
@@ -237,20 +240,26 @@ static void  intervalThunk(void *w, int i) { glfwSwapInterval(i); }
 static void  sizeThunk(void *w, int *ww, int *hh)
 	{ glfwGetFramebufferSize((GLFWwindow*)w, ww, hh); }
 
-/* ---- display topology ---------------------------------------------------
+	/* ---- host display data --------------------------------------------------
  *
- * librw cannot enumerate monitors through OpenGL, so it forwards its
- * Engine::get*VideoMode / get*SubSystem calls here. This is the code that
- * used to live in gl3device.cpp, once per windowing library. */
+	 * Used only by the host to select and restore fullscreen presentation. */
 
 static GLFWmonitor *monitor;
 static int   currentMonitor;
 static int   numMonitors;
 static int   currentMode;
 
-/* Modes for the selected monitor, deduplicated by resolution keeping the
- * highest refresh rate, with entry 0 the monitor's current mode (windowed). */
-static rw::VideoMode *modes;
+/* Where the window was before going fullscreen, so leaving it goes back to
+ * the same place and the same monitor. */
+static int windowedX, windowedY, windowedW, windowedH;
+
+/* Modes for the selected monitor, deduplicated by resolution, with entry 0
+ * the monitor's current mode used windowed.
+ *
+	 * Kept in parallel portable/native arrays because applying a mode also
+	 * needs the refresh rate. */
+static host::DisplayMode *modes;
+static GLFWvidmode   *nativeModes;
 static int numModes;
 
 static int
@@ -274,8 +283,10 @@ buildModeList(void)
 	 * through a null pointer. The host is not a librw allocation client
 	 * anyway -- its own bookkeeping has no business in librw's heap. */
 	free(modes);
-	modes = (rw::VideoMode*)malloc((n+1) * sizeof(rw::VideoMode));
-	if(modes == nil){
+	free(nativeModes);
+	modes       = (host::DisplayMode*)malloc((n+1) * sizeof(host::DisplayMode));
+	nativeModes = (GLFWvidmode*) malloc((n+1) * sizeof(GLFWvidmode));
+	if(modes == 0 || nativeModes == 0){
 		numModes = 0;
 		return;
 	}
@@ -286,6 +297,7 @@ buildModeList(void)
 	modes[0].height = cur->height;
 	modes[0].depth  = modeDepth(cur);
 	modes[0].flags  = 0;
+	nativeModes[0]  = *cur;
 	numModes = 1;
 
 	for(i = 0; i < n; i++){
@@ -295,23 +307,28 @@ buildModeList(void)
 			   modes[j].height == vm[i].height &&
 			   modes[j].depth == modeDepth(&vm[i]))
 				break;
-		if(j < numModes)
-			continue;	/* already have this resolution */
+		if(j < numModes){
+			/* same resolution seen already: keep the higher refresh */
+			if(vm[i].refreshRate > nativeModes[j].refreshRate)
+				nativeModes[j] = vm[i];
+			continue;
+		}
 		modes[numModes].width  = vm[i].width;
 		modes[numModes].height = vm[i].height;
 		modes[numModes].depth  = modeDepth(&vm[i]);
-		modes[numModes].flags  = rw::VIDEOMODEEXCLUSIVE;
+		modes[numModes].flags  = host::DISPLAYMODEEXCLUSIVE;
+		nativeModes[numModes]  = vm[i];
 		numModes++;
 	}
 }
 
-static int32  topoNumDisplays(void)      { return numMonitors; }
-static int32  topoCurrentDisplay(void)   { return currentMonitor; }
-static int32  topoNumVideoModes(void)    { return numModes; }
-static int32  topoCurrentVideoMode(void) { return currentMode; }
+static int topoNumDisplays(void)      { return numMonitors; }
+static int topoCurrentDisplay(void)   { return currentMonitor; }
+static int topoNumVideoModes(void)    { return numModes; }
+static int topoCurrentVideoMode(void) { return currentMode; }
 
-static rw::bool32
-topoSetDisplay(int32 n)
+static bool
+topoSetDisplay(int n)
 {
 	GLFWmonitor **mons = glfwGetMonitors(&numMonitors);
 	if(n < 0 || n >= numMonitors)
@@ -323,8 +340,8 @@ topoSetDisplay(int32 n)
 	return 1;
 }
 
-static rw::bool32
-topoDisplayName(int32 n, char *buf, int32 buflen)
+static bool
+topoDisplayName(int n, char *buf, int buflen)
 {
 	GLFWmonitor **mons = glfwGetMonitors(&numMonitors);
 	if(n < 0 || n >= numMonitors)
@@ -334,19 +351,152 @@ topoDisplayName(int32 n, char *buf, int32 buflen)
 	return 1;
 }
 
-static rw::bool32
-topoSetVideoMode(int32 n)
+static int
+overlap1d(int a0, int a1, int b0, int b1)
+{
+	int lo = a0 > b0 ? a0 : b0;
+	int hi = a1 < b1 ? a1 : b1;
+	return hi > lo ? hi - lo : 0;
+}
+
+/* Which monitor is the window actually on?
+ *
+ * glfwSetWindowMonitor needs an explicit monitor, and GLFW cannot tell us
+ * directly while the window is windowed (glfwGetWindowMonitor returns null
+ * then). So pick the monitor the window overlaps most, the same rule the
+ * desktop uses. Without this a two-monitor setup always fullscreens onto
+ * monitor 0 regardless of where the window was.
+ *
+ * SDL needs none of this: it fullscreens a window on the display the window
+ * already occupies. */
+static GLFWmonitor *
+monitorForWindow(int *index)
+{
+	int wx, wy, ww, wh, i;
+	GLFWmonitor **mons;
+	GLFWmonitor *best = 0;
+	int bestArea = -1;
+
+	*index = currentMonitor;
+	if(window == 0)
+		return monitor;
+
+	glfwGetWindowPos(window, &wx, &wy);
+	glfwGetWindowSize(window, &ww, &wh);
+
+	mons = glfwGetMonitors(&numMonitors);
+	for(i = 0; i < numMonitors; i++){
+		int mx, my, area;
+		const GLFWvidmode *vm;
+		glfwGetMonitorPos(mons[i], &mx, &my);
+		vm = glfwGetVideoMode(mons[i]);
+		if(vm == 0)
+			continue;
+		area = overlap1d(wx, wx+ww, mx, mx+vm->width) *
+		       overlap1d(wy, wy+wh, my, my+vm->height);
+		if(area > bestArea){
+			bestArea = area;
+			best = mons[i];
+			*index = i;
+		}
+	}
+	return best ? best : monitor;
+}
+
+/* Applying a mode does NOT recreate the window or the GL context --
+ * glfwSetWindowMonitor switches an existing window between windowed and
+ * exclusive fullscreen in place, so every raster librw has uploaded stays
+ * valid. The resize callback fires and the app resizes its cameras. */
+static bool
+topoSetVideoMode(int n)
 {
 	if(n < 0 || n >= numModes)
 		return 0;
+	if(window == 0){
+		currentMode = n;
+		return 1;	/* chosen before the window exists */
+	}
+
+	if(modes[n].flags & host::DISPLAYMODEEXCLUSIVE){
+		int idx;
+		GLFWmonitor *target;
+		int w, h, r;
+
+		/* Remember where the window was so leaving fullscreen restores
+		 * it there, rather than dumping it at a fixed position that may
+		 * be on a different monitor entirely. */
+		if(glfwGetWindowMonitor(window) == 0){
+			glfwGetWindowPos(window, &windowedX, &windowedY);
+			glfwGetWindowSize(window, &windowedW, &windowedH);
+		}
+
+		target = monitorForWindow(&idx);
+		w = nativeModes[n].width;
+		h = nativeModes[n].height;
+		r = nativeModes[n].refreshRate;
+
+		/* "Fullscreen at desktop resolution" means the target monitor's
+		 * desktop resolution, which need not match the monitor the mode
+		 * list was enumerated from. */
+		if(w == nativeModes[0].width && h == nativeModes[0].height){
+			const GLFWvidmode *vm = glfwGetVideoMode(target);
+			if(vm){
+				w = vm->width;
+				h = vm->height;
+				r = vm->refreshRate;
+			}
+		}
+
+		monitor = target;
+		currentMonitor = idx;
+		glfwSetWindowMonitor(window, target, 0, 0, w, h, r);
+	}else
+		glfwSetWindowMonitor(window, 0, windowedX, windowedY,
+			windowedW, windowedH, GLFW_DONT_CARE);
 	currentMode = n;
-	/* Applying it means recreating the window; not done yet, so this only
-	 * records the selection. */
 	return 1;
 }
 
-static rw::bool32
-topoVideoModeInfo(int32 n, rw::VideoMode *out)
+static bool
+applyFullscreen(bool enable)
+{
+	if(window == 0){
+		surface.fullscreen = enable;
+		return true;
+	}
+	if(surface.fullscreen == enable)
+		return true;
+
+	/* Clear a prior error so a failure reported below belongs to this
+	 * transition. GLFW performs the switch in place and preserves the GL
+	 * context. */
+	glfwGetError(0);
+	if(enable){
+		int idx;
+		GLFWmonitor *target = monitorForWindow(&idx);
+		const GLFWvidmode *vm = target ? glfwGetVideoMode(target) : 0;
+		if(target == 0 || vm == 0)
+			return false;
+		if(glfwGetWindowMonitor(window) == 0){
+			glfwGetWindowPos(window, &windowedX, &windowedY);
+			glfwGetWindowSize(window, &windowedW, &windowedH);
+		}
+		glfwSetWindowMonitor(window, target, 0, 0,
+			vm->width, vm->height, vm->refreshRate);
+		monitor = target;
+		currentMonitor = idx;
+	}else{
+		glfwSetWindowMonitor(window, 0, windowedX, windowedY,
+			windowedW, windowedH, GLFW_DONT_CARE);
+	}
+	if(glfwGetError(0) != GLFW_NO_ERROR)
+		return false;
+	surface.fullscreen = enable;
+	return true;
+}
+
+static bool
+topoVideoModeInfo(int n, host::DisplayMode *out)
 {
 	if(n < 0 || n >= numModes)
 		return 0;
@@ -354,37 +504,19 @@ topoVideoModeInfo(int32 n, rw::VideoMode *out)
 	return 1;
 }
 
-static int32
+static int
 topoMaxMultiSamplingLevels(void)
 {
-	GLint maxSamples = 0;
-	glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-	return maxSamples == 0 ? 1 : maxSamples;
+	return host::config.numSamples > 1 ? host::config.numSamples : 1;
 }
 
-static int32     topoMultiSamplingLevels(void) { return host::config.numSamples; }
-static rw::bool32 topoSetMultiSamplingLevels(int32 n)
+static int  topoMultiSamplingLevels(void) { return host::config.numSamples; }
+static bool topoSetMultiSamplingLevels(int n)
 {
 	/* The context already exists by the time librw can ask, and MSAA is a
 	 * window-creation hint, so only a no-op change can succeed. */
 	return n == host::config.numSamples;
 }
-
-static const rw::DisplayTopology topology = {
-	topoNumDisplays,
-	topoCurrentDisplay,
-	topoSetDisplay,
-	topoDisplayName,
-
-	topoNumVideoModes,
-	topoCurrentVideoMode,
-	topoSetVideoMode,
-	topoVideoModeInfo,
-
-	topoMaxMultiSamplingLevels,
-	topoMultiSamplingLevels,
-	topoSetMultiSamplingLevels,
-};
 
 static bool
 createSurface(void)
@@ -418,28 +550,35 @@ createSurface(void)
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, profiles[i].major);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, profiles[i].minor);
 		window = glfwCreateWindow(host::config.width, host::config.height,
-			host::config.title, nil, nil);
+			host::config.title, 0, 0);
 		if(window)
 			break;
 	}
-	if(window == nil){
+	if(window == 0){
 		fprintf(stderr, "glfwCreateWindow() failed\n");
 		return false;
 	}
 	glfwMakeContextCurrent(window);
+	glfwSetWindowPos(window, host::config.x, host::config.y);
 
-	engineOpenParams.window      = window;
-	engineOpenParams.glcontext   = nil;	/* glfw keeps it internal */
-	engineOpenParams.gles        = profiles[i].api == GLFW_OPENGL_ES_API;
-	engineOpenParams.glversion   = profiles[i].major*10 + profiles[i].minor;
-	engineOpenParams.getProc     = procThunk;
-	engineOpenParams.swapBuffers = swapThunk;
-	engineOpenParams.setSwapInterval   = intervalThunk;
-	engineOpenParams.getFramebufferSize = sizeThunk;
-	engineOpenParams.topology    = &topology;
-	engineOpenParams.width       = host::config.width;
-	engineOpenParams.height      = host::config.height;
-	engineOpenParams.windowtitle = host::config.title;
+	windowedX = host::config.x;
+	windowedY = host::config.y;
+	windowedW = host::config.width;
+	windowedH = host::config.height;
+
+	surface.window      = window;
+	surface.glcontext   = 0;	/* glfw keeps it internal */
+	surface.gles        = profiles[i].api == GLFW_OPENGL_ES_API;
+	surface.glversion   = profiles[i].major*10 + profiles[i].minor;
+	surface.getProc     = procThunk;
+	surface.swapBuffers = swapThunk;
+	surface.setSwapInterval   = intervalThunk;
+	surface.getFramebufferSize = sizeThunk;
+	surface.width       = host::config.width;
+	surface.height      = host::config.height;
+	surface.numSamples  = host::config.numSamples;
+	surface.fullscreen  = false;
+	surface.title       = host::config.title;
 	return true;
 }
 
@@ -451,6 +590,10 @@ main(int argc, char *argv[])
 
 	if(!createSurface())
 		return 0;
+	if(host::config.fullscreen && !host::setFullscreen(true)){
+		fprintf(stderr, "could not enter fullscreen\n");
+		return 0;
+	}
 
 	if(callbacks.rwInitialize && !callbacks.rwInitialize())
 		return 0;
@@ -479,12 +622,17 @@ main(int argc, char *argv[])
 	glfwDestroyWindow(window);
 	glfwTerminate();
 	free(modes);
-	modes = nil;
+	free(nativeModes);
+	modes = 0;
+	nativeModes = 0;
 
 	return 0;
 }
 
 namespace host {
+
+bool setFullscreen(bool enable) { return applyFullscreen(enable); }
+bool isFullscreen(void) { return surface.fullscreen; }
 
 void
 setMousePosition(int x, int y)

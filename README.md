@@ -15,8 +15,7 @@ librw
 >   - Input event handling is more consistent: CHARINPUT follows the same pointer convention as other events.
 >   - A clean rebuild proves the architecture works across GL3/SDL2, GL3/SDL3, GL3/GLFW, D3D9, and headless/null on Windows x64.
 > 
->   The tradeoffs are that the host API is now a real integration surface, existing applications may need migration, and display/video-mode handling is temporarily stubbed until it is fully moved into the host. We also only proved release x64 for those five configurations; debug
->   remains outside this rebuild, and there is no test suite -- "verified" means it builds, links, and the window stays up.
+>   The tradeoffs are that the host API is now a real integration surface and existing applications may need migration. Fullscreen/display policy lives in the host; D3D9 receives a narrow presentation-reset request. Release and debug x64 builds are covered for all five configurations, but there is no automated runtime test suite -- drawing, fullscreen, DPI, and multi-monitor behavior still need visual verification.
 
 ---
 

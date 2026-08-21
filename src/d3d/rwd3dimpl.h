@@ -35,6 +35,9 @@ struct D3d9Globals
 	int numModes;
 	int currentMode;
 	DisplayMode startMode;
+	int requestedWidth;
+	int requestedHeight;
+	bool32 requestedFullscreen;
 	
 	uint32 msLevel;
 

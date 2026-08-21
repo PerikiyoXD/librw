@@ -155,8 +155,11 @@ the render device gets different requests.
 At the end the device is initialized and ready for rendering.
 A similar but reverse sequence happens on shutdown.
 
-Subsystems (screens) and video modes are queried through
-the `system` by the application before the device is started.
+Legacy subsystem and video-mode queries still go through `system` before the
+device is started. A GL device reports its current drawable only; monitor and
+fullscreen policy belong to the host. D3D9 retains adapter/mode queries and
+owns swapchain reconfiguration because that presentation surface is part of
+the render device.
 
 ## Immediate mode
 
